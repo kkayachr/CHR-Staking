@@ -1,45 +1,62 @@
 // SPDX-License-Identifier: MIT
 
+/*
+
+    This contract has three parts: Delegation, Yield and TwoWeeksNoticeProvider.
+
+*/
+
 pragma solidity ^0.8.17;
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "./TwoWeeksNoticeProvider.sol";
 
 interface TwoWeeksNotice {
-    function estimateAccumulated(address account) external view returns (uint128, uint128);   
+    function estimateAccumulated(
+        address account
+    ) external view returns (uint128, uint128);
+
+    function getStakeState(
+        address account
+    ) external view returns (uint64, uint64, uint64, uint64);
 }
 
-contract Rewards {
-    mapping (address => uint128) public processed;
-    address[] delegators;
+contract ChromiaDelegation is TwoWeeksNoticeProvider {
+    mapping(address => uint128) public processed;
     uint64 public rewardPerDayPerToken;
     TwoWeeksNotice public twn;
-    IERC20 public token;
     address public owner;
-    mapping (address => address) delegatedTo;
-    
-    constructor (IERC20 _token, TwoWeeksNotice _twn, address _owner, uint64 inital_reward) {
-        token = _token;
+    mapping(address => address) delegatedTo;
+
+    constructor(
+        IERC20 _token,
+        TwoWeeksNotice _twn,
+        address _owner,
+        uint64 inital_reward
+    ) TwoWeeksNoticeProvider(_token) {
         twn = _twn;
         rewardPerDayPerToken = inital_reward;
         owner = _owner;
     }
-    
-    function estimateReward(address account) external view returns (uint256 reward) {
+
+    function estimateReward(
+        address account
+    ) external view returns (uint256 reward) {
         uint128 prevPaid = processed[account];
-        (uint128 acc,) = twn.estimateAccumulated(account);
+        (uint128 acc, ) = twn.estimateAccumulated(account);
         uint128 delta = acc - prevPaid;
         reward = (rewardPerDayPerToken * delta) / 1000000;
     }
-    
+
     function setRewardRate(uint64 rewardRate) external {
         require(msg.sender == owner);
-        
+
         rewardPerDayPerToken = rewardRate;
     }
-    
+
     function payReward(address to) public {
         uint128 prevPaid = processed[to];
-        (uint128 acc,) = twn.estimateAccumulated(to);
+        (uint128 acc, ) = twn.estimateAccumulated(to);
         if (acc > prevPaid) {
             uint128 delta = acc - prevPaid;
             uint128 reward = (rewardPerDayPerToken * delta) / 1000000;
@@ -51,16 +68,18 @@ contract Rewards {
     }
 
     function delegate(address to) public {
-        (uint128 acc,) = twn.estimateAccumulated(msg.sender);
+        (uint128 acc, ) = twn.estimateAccumulated(msg.sender);
         processed[msg.sender] = acc;
         delegatedTo[msg.sender] = to;
+        (uint delegateAmount, , , ) = twn.getStakeState(msg.sender);
+        addDelegateAmount(delegateAmount, 2 weeks, to);
     }
-    
+
     function distribute() external {
         payReward(msg.sender);
     }
-    
-    function returnToTresury () external {
+
+    function drain() external {
         require(msg.sender == owner);
         token.transfer(owner, token.balanceOf(address(this)));
     }
