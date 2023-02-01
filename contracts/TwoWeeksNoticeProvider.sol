@@ -99,10 +99,9 @@ contract TwoWeeksNoticeProvider {
         emit StakeUpdate(msg.sender, amount);
     }
 
-    function addDelegateAmount(uint amount, uint64 unlockPeriod, address provider) internal {
+    function addDelegateAmount(uint64 amount, uint64 unlockPeriod, address provider) internal {
         StakeState storage ss = _states[provider];
         require(amount > 0, "amount must be positive");
-        require(ss.balance <= amount, "cannot decrease balance");
         require(unlockPeriod <= 1000 days, "unlockPeriod cannot be higher than 1000 days");
         require(ss.unlockPeriod <= unlockPeriod, "cannot decrease unlock period");
         require(unlockPeriod >= 2 weeks, "unlock period can't be less than 2 weeks");
@@ -112,14 +111,11 @@ contract TwoWeeksNoticeProvider {
         ss.balance += amount;
         ss.since = uint64(block.timestamp);
     }
-    function removeDelegateAmount(uint64 amount, uint64 unlockPeriod, address provider) internal {
+    function removeDelegateAmount(uint64 amount, address provider) internal {
         StakeState storage ss = _states[provider];
         require(amount > 0, "amount must be positive");
         require(ss.balance <= amount, "cannot decrease balance");
-        require(unlockPeriod <= 1000 days, "unlockPeriod cannot be higher than 1000 days");
-        require(ss.unlockPeriod <= unlockPeriod, "cannot decrease unlock period");
-        require(unlockPeriod >= 2 weeks, "unlock period can't be less than 2 weeks");
-        
+
         updateAccumulated(ss);
 
         ss.balance -= amount;

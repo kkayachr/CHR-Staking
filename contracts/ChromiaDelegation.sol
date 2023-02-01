@@ -26,7 +26,14 @@ contract ChromiaDelegation is TwoWeeksNoticeProvider {
     uint64 public rewardPerDayPerToken;
     TwoWeeksNotice public twn;
     address public owner;
-    mapping(address => address) delegatedTo;
+
+    struct Delegation {
+        uint64 delegatedAmount;
+        uint128 processed;
+        address delegatedTo;
+    }
+
+    mapping(address => Delegation) delegations;
 
     constructor(
         IERC20 _token,
@@ -68,11 +75,19 @@ contract ChromiaDelegation is TwoWeeksNoticeProvider {
     }
 
     function delegate(address to) public {
+        Delegation storage userDelegation = delegations[msg.sender];
         (uint128 acc, ) = twn.estimateAccumulated(msg.sender);
-        processed[msg.sender] = acc;
-        delegatedTo[msg.sender] = to;
-        (uint delegateAmount, , , ) = twn.getStakeState(msg.sender);
+        (uint64 delegateAmount, , , ) = twn.getStakeState(msg.sender);
+        userDelegation.processed = acc;
+        userDelegation.delegatedTo = to;
         addDelegateAmount(delegateAmount, 2 weeks, to);
+    }
+
+    function undelegate() public {
+        Delegation storage userDelegation = delegations[msg.sender];
+        removeDelegateAmount(userDelegation.delegatedAmount, userDelegation.delegatedTo);
+        userDelegation.delegatedAmount = 0;
+        userDelegation.delegatedTo = address(0);
     }
 
     function distribute() external {
