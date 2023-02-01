@@ -128,7 +128,6 @@ contract TwoWeeksNoticeProvider {
         require(amount > 0, "amount must be positive");
 
         ss.delegationRewards += amount;
-        ss.since = uint64(block.timestamp);
     }
 
     function claimDelegationReward() public {
