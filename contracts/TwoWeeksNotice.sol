@@ -9,7 +9,7 @@ pragma solidity 0.8.17;
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 contract TwoWeeksNotice {
-    
+
     struct StakeState {
         uint64 balance;
         uint64 unlockPeriod; // time it takes from requesting withdraw to being able to withdraw

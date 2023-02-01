@@ -12,7 +12,7 @@ contract TwoWeeksNoticeProvider {
     
     struct StakeState {
         uint64 balance;
-        uint64 delegationBalance;
+        uint64 delegationRewards;
         uint64 unlockPeriod; // time it takes from requesting withdraw to being able to withdraw
         uint64 lockedUntil; // 0 if withdraw is not requested
         uint64 since;
@@ -69,7 +69,7 @@ contract TwoWeeksNoticeProvider {
                 until = ss.lockedUntil;
             }
             if (until > ss.since) {
-                uint128 delta = uint128( (uint256(ss.balance+ss.delegationBalance) * (until - ss.since))/86400 );
+                uint128 delta = uint128( (uint256(ss.balance) * (until - ss.since))/86400 );
                 ss.accumulated += delta;
                 if (ss.lockedUntil == 0) {
                     ss.accumulatedStrict += delta;
@@ -123,24 +123,20 @@ contract TwoWeeksNoticeProvider {
         emit StakeUpdate(msg.sender, 0);
     }
 
-    function addDelegateAmount(uint64 amount, address provider) internal {
+    function addDelegationReward(uint64 amount, address provider) internal {
         StakeState storage ss = _states[provider];
         require(amount > 0, "amount must be positive");
-        
-        updateAccumulated(ss);
 
-        ss.delegationBalance += amount;
+        ss.delegationRewards += amount;
         ss.since = uint64(block.timestamp);
     }
 
-    function removeDelegateAmount(uint64 amount, address provider) internal {
-        StakeState storage ss = _states[provider];
-        require(amount > 0, "amount must be positive");
-        require(ss.delegationBalance <= amount, "too small delegation balance");
-
-        updateAccumulated(ss);
-
-        ss.delegationBalance -= amount;
-        ss.since = uint64(block.timestamp);
+    function claimDelegationReward() public {
+        uint128 reward = _states[msg.sender].delegationRewards;
+        if (reward > 0) {
+            _states[msg.sender].delegationRewards = 0;
+            token.transfer(msg.sender, reward);
+        }
     }
+
 }
