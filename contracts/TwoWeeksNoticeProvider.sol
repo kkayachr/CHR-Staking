@@ -12,6 +12,7 @@ contract TwoWeeksNoticeProvider {
     
     struct StakeState {
         uint64 balance;
+        uint64 delegationBalance;
         uint64 unlockPeriod; // time it takes from requesting withdraw to being able to withdraw
         uint64 lockedUntil; // 0 if withdraw is not requested
         uint64 since;
@@ -68,7 +69,7 @@ contract TwoWeeksNoticeProvider {
                 until = ss.lockedUntil;
             }
             if (until > ss.since) {
-                uint128 delta = uint128( (uint256(ss.balance) * (until - ss.since))/86400 );
+                uint128 delta = uint128( (uint256(ss.balance+ss.delegationBalance) * (until - ss.since))/86400 );
                 ss.accumulated += delta;
                 if (ss.lockedUntil == 0) {
                     ss.accumulatedStrict += delta;
@@ -98,29 +99,6 @@ contract TwoWeeksNoticeProvider {
         ss.since = uint64(block.timestamp);
         emit StakeUpdate(msg.sender, amount);
     }
-
-    function addDelegateAmount(uint64 amount, uint64 unlockPeriod, address provider) internal {
-        StakeState storage ss = _states[provider];
-        require(amount > 0, "amount must be positive");
-        require(unlockPeriod <= 1000 days, "unlockPeriod cannot be higher than 1000 days");
-        require(ss.unlockPeriod <= unlockPeriod, "cannot decrease unlock period");
-        require(unlockPeriod >= 2 weeks, "unlock period can't be less than 2 weeks");
-        
-        updateAccumulated(ss);
-
-        ss.balance += amount;
-        ss.since = uint64(block.timestamp);
-    }
-    function removeDelegateAmount(uint64 amount, address provider) internal {
-        StakeState storage ss = _states[provider];
-        require(amount > 0, "amount must be positive");
-        require(ss.balance <= amount, "cannot decrease balance");
-
-        updateAccumulated(ss);
-
-        ss.balance -= amount;
-        ss.since = uint64(block.timestamp);
-    }
     
     function requestWithdraw() external {
          StakeState storage ss = _states[msg.sender];
@@ -143,5 +121,26 @@ contract TwoWeeksNoticeProvider {
         ss.since = 0;
         require(token.transfer(to, balance), "transfer unsuccessful");
         emit StakeUpdate(msg.sender, 0);
+    }
+
+    function addDelegateAmount(uint64 amount, address provider) internal {
+        StakeState storage ss = _states[provider];
+        require(amount > 0, "amount must be positive");
+        
+        updateAccumulated(ss);
+
+        ss.delegationBalance += amount;
+        ss.since = uint64(block.timestamp);
+    }
+
+    function removeDelegateAmount(uint64 amount, address provider) internal {
+        StakeState storage ss = _states[provider];
+        require(amount > 0, "amount must be positive");
+        require(ss.delegationBalance <= amount, "too small delegation balance");
+
+        updateAccumulated(ss);
+
+        ss.delegationBalance -= amount;
+        ss.since = uint64(block.timestamp);
     }
 }

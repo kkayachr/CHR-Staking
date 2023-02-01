@@ -19,10 +19,11 @@ interface TwoWeeksNotice {
     function getStakeState(
         address account
     ) external view returns (uint64, uint64, uint64, uint64);
+    
+    function withdraw(address to) external;
 }
 
 contract ChromiaDelegation is TwoWeeksNoticeProvider {
-    mapping(address => uint128) public processed;
     uint64 public rewardPerDayPerToken;
     TwoWeeksNotice public twn;
     address public owner;
@@ -49,7 +50,7 @@ contract ChromiaDelegation is TwoWeeksNoticeProvider {
     function estimateReward(
         address account
     ) external view returns (uint256 reward) {
-        uint128 prevPaid = processed[account];
+        uint128 prevPaid = delegations[account].processed;
         (uint128 acc, ) = twn.estimateAccumulated(account);
         uint128 delta = acc - prevPaid;
         reward = (rewardPerDayPerToken * delta) / 1000000;
@@ -62,13 +63,13 @@ contract ChromiaDelegation is TwoWeeksNoticeProvider {
     }
 
     function payReward(address to) public {
-        uint128 prevPaid = processed[to];
+        uint128 prevPaid = delegations[to].processed;
         (uint128 acc, ) = twn.estimateAccumulated(to);
         if (acc > prevPaid) {
             uint128 delta = acc - prevPaid;
             uint128 reward = (rewardPerDayPerToken * delta) / 1000000;
             if (reward > 0) {
-                processed[to] = acc;
+                delegations[to].processed = acc;
                 token.transfer(to, reward);
             }
         }
@@ -78,16 +79,26 @@ contract ChromiaDelegation is TwoWeeksNoticeProvider {
         Delegation storage userDelegation = delegations[msg.sender];
         (uint128 acc, ) = twn.estimateAccumulated(msg.sender);
         (uint64 delegateAmount, , , ) = twn.getStakeState(msg.sender);
+        require(delegateAmount > 0, "Must have a stake to delegate");
         userDelegation.processed = acc;
         userDelegation.delegatedTo = to;
-        addDelegateAmount(delegateAmount, 2 weeks, to);
+        userDelegation.delegatedAmount = delegateAmount;
+        addDelegateAmount(delegateAmount, to);
     }
 
     function undelegate() public {
         Delegation storage userDelegation = delegations[msg.sender];
-        removeDelegateAmount(userDelegation.delegatedAmount, userDelegation.delegatedTo);
+        removeDelegateAmount(
+            userDelegation.delegatedAmount,
+            userDelegation.delegatedTo
+        );
         userDelegation.delegatedAmount = 0;
         userDelegation.delegatedTo = address(0);
+    }
+
+    function userWithdraw(address to) public {
+        undelegate();
+        twn.withdraw(to);
     }
 
     function distribute() external {
