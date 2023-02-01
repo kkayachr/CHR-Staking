@@ -31,9 +31,9 @@ contract TwoWeeksNoticeProvider {
         token = _token;
     }
 
-    function getStakeState(address account) external view returns (uint64, uint64, uint64, uint64) {
+    function getStakeState(address account) external view returns (uint64, uint64, uint64, uint64, uint64) {
         StakeState storage ss = _states[account];
-        return (ss.balance, ss.unlockPeriod, ss.lockedUntil, ss.since);
+        return (ss.balance, ss.delegationRewards, ss.unlockPeriod, ss.lockedUntil, ss.since);
     }
     
     function getAccumulated(address account) external view returns (uint128, uint128) {
