@@ -13,6 +13,7 @@ contract TwoWeeksNoticeProvider {
     struct StakeState {
         uint64 balance;
         uint64 delegationRewards;
+        uint128 processed;
         uint64 unlockPeriod; // time it takes from requesting withdraw to being able to withdraw
         uint64 lockedUntil; // 0 if withdraw is not requested
         uint64 since;
@@ -41,7 +42,7 @@ contract TwoWeeksNoticeProvider {
         return (ss.accumulated, ss.accumulatedStrict);
     }
 
-    function estimateAccumulated(address account) external view returns (uint128, uint128) {
+    function estimateAccumulated(address account) public view returns (uint128, uint128) {
         StakeState storage ss = _states[account];
         uint128 sum = ss.accumulated;
         uint128 sumStrict = ss.accumulatedStrict;
@@ -138,4 +139,24 @@ contract TwoWeeksNoticeProvider {
         }
     }
 
+
+    function estimateProviderYield(
+        address account
+    ) public view returns (uint128 reward) {
+        uint128 prevPaid = _states[msg.sender].processed;
+        (uint128 acc, ) = estimateAccumulated(account);
+        if (acc > prevPaid) {
+            uint128 delta = acc - prevPaid;
+            reward = (1 * delta) / 1000000; // TODO: ADD A RATIO
+        }
+    }
+
+    function claimProviderYield() public {
+        uint128 reward = estimateProviderYield(msg.sender);
+        if (reward > 0) {
+            (uint128 acc, ) = estimateAccumulated(msg.sender);
+            _states[msg.sender].processed = acc;
+            token.transfer(msg.sender, reward);
+        }
+    }
 }

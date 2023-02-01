@@ -47,7 +47,7 @@ contract ChromiaDelegation is TwoWeeksNoticeProvider {
         rewardPerDayPerToken = rewardRate;
     }
 
-    function estimateReward(
+    function estimateYield(
         address account
     ) public view returns (uint128 reward) {
         uint128 prevPaid = delegations[account].processed;
@@ -59,7 +59,7 @@ contract ChromiaDelegation is TwoWeeksNoticeProvider {
     }
 
     function claimYield(address account) public {
-        uint128 reward = estimateReward(account);
+        uint128 reward = estimateYield(account);
         if (reward > 0) {
             (uint128 acc, ) = twn.estimateAccumulated(account);
             delegations[account].processed = acc;
