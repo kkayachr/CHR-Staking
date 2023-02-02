@@ -173,10 +173,9 @@ contract TwoWeeksNoticeProvider {
 
     function claimDelegationReward() public {
         uint128 reward = _states[msg.sender].delegationRewards;
-        if (reward > 0) {
-            _states[msg.sender].delegationRewards = 0;
-            token.transfer(msg.sender, reward);
-        }
+        require(reward > 0, "reward is 0");
+        _states[msg.sender].delegationRewards = 0;
+        token.transfer(msg.sender, reward);
     }
 
     function estimateProviderYield(
@@ -192,21 +191,19 @@ contract TwoWeeksNoticeProvider {
 
     function claimProviderYield() public {
         uint128 reward = estimateProviderYield(msg.sender);
-        if (reward > 0) {
-            (uint128 acc, ) = estimateAccumulated(msg.sender);
-            _states[msg.sender].processed = acc;
-            token.transfer(msg.sender, reward);
-        }
+        require(reward > 0, "reward is 0");
+        (uint128 acc, ) = estimateAccumulated(msg.sender);
+        _states[msg.sender].processed = acc;
+        token.transfer(msg.sender, reward);
     }
 
     function claimAllProviderRewards() public {
         uint128 reward = _states[msg.sender].delegationRewards;
         reward += estimateProviderYield(msg.sender);
-        if (reward > 0) {
-            (uint128 acc, ) = estimateAccumulated(msg.sender);
-            _states[msg.sender].processed = acc;
-            _states[msg.sender].delegationRewards = 0;
-            token.transfer(msg.sender, reward);
-        }
+        require(reward > 0, "reward is 0");
+        (uint128 acc, ) = estimateAccumulated(msg.sender);
+        _states[msg.sender].processed = acc;
+        _states[msg.sender].delegationRewards = 0;
+        token.transfer(msg.sender, reward);
     }
 }
