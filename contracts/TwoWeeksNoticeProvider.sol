@@ -139,7 +139,6 @@ contract TwoWeeksNoticeProvider {
         }
     }
 
-
     function estimateProviderYield(
         address account
     ) public view returns (uint128 reward) {
