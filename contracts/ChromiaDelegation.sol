@@ -22,7 +22,6 @@ interface TwoWeeksNotice {
 contract ChromiaDelegation is TwoWeeksNoticeProvider {
     uint64 public rewardPerDayPerToken;
     TwoWeeksNotice public twn;
-    address public owner;
 
     struct Delegation {
         uint128 processed;
@@ -36,17 +35,17 @@ contract ChromiaDelegation is TwoWeeksNoticeProvider {
         IERC20 _token,
         TwoWeeksNotice _twn,
         address _owner,
-        uint64 inital_reward
-    ) TwoWeeksNoticeProvider(_token) {
+        uint64 inital_reward,
+        uint64 inital_reward_provider
+    ) TwoWeeksNoticeProvider(_token, _owner, inital_reward_provider) {
         twn = _twn;
         rewardPerDayPerToken = inital_reward;
-        owner = _owner;
     }
 
-    function setRewardRate(uint64 rewardRate) external {
-        require(msg.sender == owner);
-        rewardPerDayPerToken = rewardRate;
-    }
+        function setRewardRate(uint64 rewardRate) external {
+            require(msg.sender == owner);
+            rewardPerDayPerToken = rewardRate;
+        }
 
     function estimateYield(
         address account
@@ -60,7 +59,10 @@ contract ChromiaDelegation is TwoWeeksNoticeProvider {
     }
 
     function claimYield(address account) public {
-        require(delegations[account].accountInitialized,"Address must make a first delegation.");
+        require(
+            delegations[account].accountInitialized,
+            "Address must make a first delegation."
+        );
         uint128 reward = estimateYield(account);
         if (reward > 0) {
             (uint128 acc, ) = twn.estimateAccumulated(account);

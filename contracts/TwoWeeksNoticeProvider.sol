@@ -1,6 +1,6 @@
 /**
  *Submitted for verification at BscScan.com on 2021-08-20
-*/
+ */
 
 // SPDX-License-Identifier: MIT
 
@@ -9,7 +9,6 @@ pragma solidity ^0.8.17;
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 contract TwoWeeksNoticeProvider {
-    
     struct StakeState {
         uint64 balance;
         uint64 delegationRewards;
@@ -20,29 +19,55 @@ contract TwoWeeksNoticeProvider {
         uint128 accumulated; // token-days staked
         uint128 accumulatedStrict; // token-days staked sans withdraw periods
     }
-    
+
     event StakeUpdate(address indexed from, uint64 balance);
     event WithdrawRequest(address indexed from, uint64 until);
-    
+
     mapping(address => StakeState) private _states;
-    
+
+    uint64 public rewardPerDayPerTokenProvider;
     IERC20 internal token;
-    
-    constructor (IERC20 _token) {
+    address public owner;
+
+    constructor(
+        IERC20 _token,
+        address _owner,
+        uint64 _rewardPerDayPerTokenProvider
+    ) {
         token = _token;
+        owner = _owner;
+        rewardPerDayPerTokenProvider = _rewardPerDayPerTokenProvider;
     }
 
-    function getStakeState(address account) external view returns (uint64, uint64, uint64, uint64, uint64) {
-        StakeState storage ss = _states[account];
-        return (ss.balance, ss.delegationRewards, ss.unlockPeriod, ss.lockedUntil, ss.since);
+    function setProviderRewardRate(uint64 rewardRate) external {
+        require(msg.sender == owner);
+        rewardPerDayPerTokenProvider = rewardRate;
     }
-    
-    function getAccumulated(address account) external view returns (uint128, uint128) {
+
+    function getStakeState(
+        address account
+    ) external view returns (uint64, uint64, uint64, uint64, uint64, uint128) {
+        StakeState storage ss = _states[account];
+        return (
+            ss.balance,
+            ss.delegationRewards,
+            ss.unlockPeriod,
+            ss.lockedUntil,
+            ss.since,
+            ss.processed
+        );
+    }
+
+    function getAccumulated(
+        address account
+    ) external view returns (uint128, uint128) {
         StakeState storage ss = _states[account];
         return (ss.accumulated, ss.accumulatedStrict);
     }
 
-    function estimateAccumulated(address account) public view returns (uint128, uint128) {
+    function estimateAccumulated(
+        address account
+    ) public view returns (uint128, uint128) {
         StakeState storage ss = _states[account];
         uint128 sum = ss.accumulated;
         uint128 sumStrict = ss.accumulatedStrict;
@@ -52,7 +77,9 @@ contract TwoWeeksNoticeProvider {
                 until = ss.lockedUntil;
             }
             if (until > ss.since) {
-                uint128 delta = uint128( (uint256(ss.balance) * (until - ss.since))/86400 );
+                uint128 delta = uint128(
+                    (uint256(ss.balance) * (until - ss.since)) / 86400
+                );
                 sum += delta;
                 if (ss.lockedUntil == 0) {
                     sumStrict += delta;
@@ -61,8 +88,7 @@ contract TwoWeeksNoticeProvider {
         }
         return (sum, sumStrict);
     }
-    
-    
+
     function updateAccumulated(StakeState storage ss) private {
         if (ss.balance > 0) {
             uint256 until = block.timestamp;
@@ -70,7 +96,9 @@ contract TwoWeeksNoticeProvider {
                 until = ss.lockedUntil;
             }
             if (until > ss.since) {
-                uint128 delta = uint128( (uint256(ss.balance) * (until - ss.since))/86400 );
+                uint128 delta = uint128(
+                    (uint256(ss.balance) * (until - ss.since)) / 86400
+                );
                 ss.accumulated += delta;
                 if (ss.lockedUntil == 0) {
                     ss.accumulatedStrict += delta;
@@ -83,15 +111,27 @@ contract TwoWeeksNoticeProvider {
         StakeState storage ss = _states[msg.sender];
         require(amount > 0, "amount must be positive");
         require(ss.balance <= amount, "cannot decrease balance");
-        require(unlockPeriod <= 1000 days, "unlockPeriod cannot be higher than 1000 days");
-        require(ss.unlockPeriod <= unlockPeriod, "cannot decrease unlock period");
-        require(unlockPeriod >= 2 weeks, "unlock period can't be less than 2 weeks");
-        
+        require(
+            unlockPeriod <= 1000 days,
+            "unlockPeriod cannot be higher than 1000 days"
+        );
+        require(
+            ss.unlockPeriod <= unlockPeriod,
+            "cannot decrease unlock period"
+        );
+        require(
+            unlockPeriod >= 2 weeks,
+            "unlock period can't be less than 2 weeks"
+        );
+
         updateAccumulated(ss);
-        
+
         uint128 delta = amount - ss.balance;
         if (delta > 0) {
-            require(token.transferFrom(msg.sender, address(this), delta), "transfer unsuccessful");
+            require(
+                token.transferFrom(msg.sender, address(this), delta),
+                "transfer unsuccessful"
+            );
         }
 
         ss.balance = amount;
@@ -100,13 +140,13 @@ contract TwoWeeksNoticeProvider {
         ss.since = uint64(block.timestamp);
         emit StakeUpdate(msg.sender, amount);
     }
-    
+
     function requestWithdraw() external {
-         StakeState storage ss = _states[msg.sender];
-         require(ss.balance > 0);
-         updateAccumulated(ss);
-         ss.since = uint64(block.timestamp);
-         ss.lockedUntil = uint64(block.timestamp + ss.unlockPeriod);
+        StakeState storage ss = _states[msg.sender];
+        require(ss.balance > 0);
+        updateAccumulated(ss);
+        ss.since = uint64(block.timestamp);
+        ss.lockedUntil = uint64(block.timestamp + ss.unlockPeriod);
     }
 
     function withdraw(address to) external {
@@ -155,6 +195,17 @@ contract TwoWeeksNoticeProvider {
         if (reward > 0) {
             (uint128 acc, ) = estimateAccumulated(msg.sender);
             _states[msg.sender].processed = acc;
+            token.transfer(msg.sender, reward);
+        }
+    }
+
+    function claimAllProviderRewards() public {
+        uint128 reward = _states[msg.sender].delegationRewards;
+        reward += estimateProviderYield(msg.sender);
+        if (reward > 0) {
+            (uint128 acc, ) = estimateAccumulated(msg.sender);
+            _states[msg.sender].processed = acc;
+            _states[msg.sender].delegationRewards = 0;
             token.transfer(msg.sender, reward);
         }
     }
