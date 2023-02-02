@@ -20,6 +20,9 @@ module.exports = {
   networks: {
     hardhat: {
       allowUnlimitedContractSize: true,
+      accounts: {
+        count: 50
+      }
     },
     BSCTestnet: {
       url: `${RPC_NODE}`,
