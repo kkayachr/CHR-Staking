@@ -49,6 +49,7 @@ describe("ChromiaDelegation", function () {
     };
   }
 
+  // User simply claiming their yield
   it("Should let user delegate and record processed", async () => {
     const { chromiaDelegation, twoWeeksNotice, erc20Mock, owner, randomAddresses } =
       await loadFixture(deployChromiaDelegation);
@@ -61,6 +62,9 @@ describe("ChromiaDelegation", function () {
     await expect(delegation[0]).to.be.closeTo(prevAcc[0], Math.round(prevAcc[0].toNumber() * 0.0000001));
   });
 
+  // If user hasnt used delegation before, shouldnt let them claim yield
+  // since the "processed" variable hasnt been set yet and no delegation
+  // has happened. User must first delegate to someone.
   it("Should not let claim uninitialized yield", async () => {
     const { chromiaDelegation, twoWeeksNotice, erc20Mock, owner, randomAddresses } =
       await loadFixture(deployChromiaDelegation);
@@ -69,6 +73,7 @@ describe("ChromiaDelegation", function () {
     await expect(chromiaDelegation.claimYield(randomAddresses[0].address)).to.be.revertedWith("Address must make a first delegation.");
   });
 
+  // Provider claiming their own yield (not delegation reward)
   it("Should let provider claim yield", async () => {
     const { chromiaDelegation, twoWeeksNotice, erc20Mock, owner, randomAddresses } =
       await loadFixture(deployChromiaDelegation);
@@ -87,6 +92,7 @@ describe("ChromiaDelegation", function () {
     await expect(processed).to.be.closeTo(expectedProcessed, Math.round(expectedProcessed.toNumber() * 0.0000001));
   });
 
+  // Provider claiming delegation reward + their own yield
   it("Should let provider claim all rewards", async () => {
     const { chromiaDelegation, twoWeeksNotice, erc20Mock, owner, randomAddresses } =
       await loadFixture(deployChromiaDelegation);
@@ -120,6 +126,8 @@ describe("ChromiaDelegation", function () {
     await expect(providerStakeState[5]).to.be.closeTo(expectedProcessed, Math.round(expectedProcessed.toNumber() * 0.0000001));
   });
 
+  // User and provider using the contract demonstrated (make sure to see)
+  // the deployChromiaDelegation function as well for full use flow.
   it("Normal use flow", async () => {
     const { chromiaDelegation, twoWeeksNotice, erc20Mock, owner, randomAddresses } =
       await loadFixture(deployChromiaDelegation);
