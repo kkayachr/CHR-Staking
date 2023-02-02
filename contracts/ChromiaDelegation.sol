@@ -27,10 +27,10 @@ contract ChromiaDelegation is TwoWeeksNoticeProvider {
     struct Delegation {
         uint128 processed;
         address delegatedTo;
-        bool initialized;
+        bool accountInitialized;
     }
 
-    mapping(address => Delegation) delegations;
+    mapping(address => Delegation) public delegations;
 
     constructor(
         IERC20 _token,
@@ -60,14 +60,14 @@ contract ChromiaDelegation is TwoWeeksNoticeProvider {
     }
 
     function claimYield(address account) public {
-        require(delegations[account].initialized,"Address must make a first delegation.");
+        require(delegations[account].accountInitialized,"Address must make a first delegation.");
         uint128 reward = estimateYield(account);
         if (reward > 0) {
             (uint128 acc, ) = twn.estimateAccumulated(account);
             delegations[account].processed = acc;
             token.transfer(account, reward);
             addDelegationReward(
-                uint64(reward / 100), // TODO: Change to correct reward percentage for provider.
+                uint64(reward / 10), // TODO: Change to correct reward percentage for provider.
                 delegations[account].delegatedTo
             );
         }
@@ -80,7 +80,7 @@ contract ChromiaDelegation is TwoWeeksNoticeProvider {
         require(delegateAmount > 0, "Must have a stake to delegate");
         userDelegation.processed = acc;
         userDelegation.delegatedTo = to;
-        userDelegation.initialized = true;
+        userDelegation.accountInitialized = true;
     }
 
     function undelegate() public {
