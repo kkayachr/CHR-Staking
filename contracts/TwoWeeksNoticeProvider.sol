@@ -9,6 +9,11 @@ pragma solidity ^0.8.17;
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 contract TwoWeeksNoticeProvider {
+    struct StakeChange {
+        uint128 timePoint;
+        uint128 balance;
+    }
+
     struct StakeState {
         uint64 balance;
         uint64 delegationRewards;
@@ -18,12 +23,13 @@ contract TwoWeeksNoticeProvider {
         uint64 since;
         uint128 accumulated; // token-days staked
         uint128 accumulatedStrict; // token-days staked sans withdraw periods
+        StakeChange[] stakeTimeline;
     }
 
     event StakeUpdate(address indexed from, uint64 balance);
     event WithdrawRequest(address indexed from, uint64 until);
 
-    mapping(address => StakeState) private _states;
+    mapping(address => StakeState) internal _states;
 
     uint64 public rewardPerDayPerTokenProvider;
     IERC20 internal token;
@@ -138,6 +144,7 @@ contract TwoWeeksNoticeProvider {
         ss.unlockPeriod = unlockPeriod;
         ss.lockedUntil = 0;
         ss.since = uint64(block.timestamp);
+        ss.stakeTimeline.push(StakeChange(uint128(block.timestamp), amount));
         emit StakeUpdate(msg.sender, amount);
     }
 
@@ -160,6 +167,7 @@ contract TwoWeeksNoticeProvider {
         ss.unlockPeriod = 0;
         ss.lockedUntil = 0;
         ss.since = 0;
+        ss.stakeTimeline.push(StakeChange(uint128(block.timestamp), 0));
         require(token.transfer(to, balance), "transfer unsuccessful");
         emit StakeUpdate(msg.sender, 0);
     }
