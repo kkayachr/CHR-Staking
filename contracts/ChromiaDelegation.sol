@@ -52,7 +52,7 @@ contract ChromiaDelegation is TwoWeeksNoticeProvider {
     }
 
     function verifyRemoteAccumulated(uint128 remoteAccumulated, address account) public view {
-        uint128 localAccumulated = estimateYieldFrom(account, delegations[account].processedDate);
+        uint128 localAccumulated = estimateAccumulatedFrom(account, delegations[account].processedDate);
 
         require(
             localAccumulated > (remoteAccumulated - delegations[account].processed) - 10,
@@ -82,7 +82,7 @@ contract ChromiaDelegation is TwoWeeksNoticeProvider {
             }
             uint128 subtractedYield;
             if (providerStakeEnd > 0) {
-                subtractedYield = estimateYieldFrom(account, providerStakeEnd); // If provider has ended stake, subtract from that point
+                subtractedYield = estimateAccumulatedFrom(account, providerStakeEnd); // If provider has ended stake, subtract from that point
             }
             uint128 delta = acc - prevPaid - subtractedYield;
             reward = (rewardPerDayPerToken * delta) / 1000000;
@@ -90,7 +90,7 @@ contract ChromiaDelegation is TwoWeeksNoticeProvider {
     }
 
     // If provider has stopped providing, we want to subtract "accumulated token days" from that point.
-    function estimateYieldFrom(address account, uint128 from) private view returns (uint128 subtractedYield) {
+    function estimateAccumulatedFrom(address account, uint128 from) private view returns (uint128 subtractedYield) {
         uint128 prevTimepoint;
         uint128 deltaTime;
         if (delegations[account].delegationTimeline.length > 1) {
