@@ -92,6 +92,14 @@ contract TwoWeeksNoticeProvider {
         }
     }
 
+    function unStake() public {
+        StakeState storage ss = _states[msg.sender];
+        ss.balance = 0;
+        ss.lockedUntil = 0;
+        ss.since = uint64(block.timestamp);
+        ss.stakeTimeline.push(StakeChange(uint128(block.timestamp), 0));
+    }
+
     function stake(uint64 amount, uint64 unlockPeriod) external {
         StakeState storage ss = _states[msg.sender];
         require(amount > 0, 'amount must be positive');

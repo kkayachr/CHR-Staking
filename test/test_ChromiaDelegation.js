@@ -92,6 +92,23 @@ describe("ChromiaDelegation", function () {
     await expect(processed).to.be.closeTo(expectedProcessed, Math.round(expectedProcessed.toNumber() * 0.0000001));
   });
 
+  it("Should give correct delegator reward when provider unstakes", async () => {
+    const { chromiaDelegation, twoWeeksNotice, erc20Mock, owner, randomAddresses } =
+      await loadFixture(deployChromiaDelegation);
+
+    await chromiaDelegation.connect(randomAddresses[0]).delegate(owner.address);
+    await time.increase(days(365));
+
+    await chromiaDelegation.unStake();
+    let expectedYield = await chromiaDelegation.estimateYield(randomAddresses[0].address);
+    await time.increase(days(365));
+    let preBalance = await erc20Mock.balanceOf(randomAddresses[0].address);
+    // Claim yield
+    await chromiaDelegation.connect(randomAddresses[0]).claimYield(randomAddresses[0].address);
+    let postBalance = await erc20Mock.balanceOf(randomAddresses[0].address);
+    await expect(postBalance - preBalance).to.eq(expectedYield.toNumber());
+  });
+
   // Provider claiming delegation reward + their own yield
   it("Should let provider claim all rewards", async () => {
     const { chromiaDelegation, twoWeeksNotice, erc20Mock, owner, randomAddresses } =
@@ -166,4 +183,6 @@ describe("ChromiaDelegation", function () {
     providerReward = await chromiaDelegation.getStakeState(owner.address);
     await expect(providerReward[1]).to.eq(0);
   });
+
+
 });

@@ -52,7 +52,7 @@ contract ChromiaDelegation is TwoWeeksNoticeProvider {
     }
 
     function verifyRemoteAccumulated(uint128 remoteAccumulated, address account) public view {
-        uint128 localAccumulated = estimateYieldFrom(account, delegations[account].processedDate) / 86400;
+        uint128 localAccumulated = estimateYieldFrom(account, delegations[account].processedDate);
 
         require(
             localAccumulated > (remoteAccumulated - delegations[account].processed) - 10,
@@ -114,6 +114,7 @@ contract ChromiaDelegation is TwoWeeksNoticeProvider {
         subtractedYield +=
             deltaTime *
             delegations[account].delegationTimeline[delegations[account].delegationTimeline.length - 1].balance;
+        subtractedYield = subtractedYield / 86400;
     }
 
     function claimYield(address account) public {
