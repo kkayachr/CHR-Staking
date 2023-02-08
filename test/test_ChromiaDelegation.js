@@ -99,9 +99,32 @@ describe("ChromiaDelegation", function () {
     await chromiaDelegation.connect(randomAddresses[0]).delegate(owner.address);
     await time.increase(days(365));
 
-    await chromiaDelegation.unStake();
+    await chromiaDelegation.withdraw(owner.address);
     let expectedYield = await chromiaDelegation.estimateYield(randomAddresses[0].address);
     await time.increase(days(365));
+    let preBalance = await erc20Mock.balanceOf(randomAddresses[0].address);
+    // Claim yield
+    await chromiaDelegation.connect(randomAddresses[0]).claimYield(randomAddresses[0].address);
+    let postBalance = await erc20Mock.balanceOf(randomAddresses[0].address);
+    await expect(postBalance - preBalance).to.eq(expectedYield.toNumber());
+  });
+  it("Should give correct delegator reward when provider unstakes twice", async () => {
+    const { chromiaDelegation, twoWeeksNotice, erc20Mock, owner, randomAddresses } =
+      await loadFixture(deployChromiaDelegation);
+
+    await chromiaDelegation.connect(randomAddresses[0]).delegate(owner.address);
+    await time.increase(days(365));
+
+    await chromiaDelegation.withdraw(owner.address);
+    await erc20Mock.increaseAllowance(chromiaDelegation.address, 10000000000);
+    let expectedYield = await chromiaDelegation.estimateYield(randomAddresses[0].address);
+    await time.increase(days(365));
+
+    await chromiaDelegation.stake(10000000000, days(14));
+    await time.increase(days(365));
+    await chromiaDelegation.withdraw(owner.address);
+    await time.increase(days(365));
+
     let preBalance = await erc20Mock.balanceOf(randomAddresses[0].address);
     // Claim yield
     await chromiaDelegation.connect(randomAddresses[0]).claimYield(randomAddresses[0].address);

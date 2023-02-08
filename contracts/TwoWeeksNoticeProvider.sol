@@ -92,14 +92,6 @@ contract TwoWeeksNoticeProvider {
         }
     }
 
-    function unStake() public {
-        StakeState storage ss = _states[msg.sender];
-        ss.balance = 0;
-        ss.lockedUntil = 0;
-        ss.since = uint64(block.timestamp);
-        ss.stakeTimeline.push(StakeChange(uint128(block.timestamp), 0));
-    }
-
     function stake(uint64 amount, uint64 unlockPeriod) external {
         StakeState storage ss = _states[msg.sender];
         require(amount > 0, 'amount must be positive');
@@ -134,8 +126,8 @@ contract TwoWeeksNoticeProvider {
     function withdraw(address to) external {
         StakeState storage ss = _states[msg.sender];
         require(ss.balance > 0, 'must have tokens to withdraw');
-        require(ss.lockedUntil != 0, 'unlock not requested');
-        require(ss.lockedUntil < block.timestamp, 'still locked');
+        // require(ss.lockedUntil != 0, 'unlock not requested');
+        // require(ss.lockedUntil < block.timestamp, 'still locked');
         updateAccumulated(ss);
         uint128 balance = ss.balance;
         ss.balance = 0;
