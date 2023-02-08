@@ -91,13 +91,8 @@ contract ChromiaDelegation is TwoWeeksNoticeProvider {
                     break;
                 }
             }
-            // Remove all accumulated from the point of provider withdrawal
-            uint128 subtractedYield;
-            if (providerStakeEnd > 0) {
-                subtractedYield = estimateAccumulatedFromTo(account, providerStakeEnd, uint128(block.timestamp)); // If provider has ended stake, subtract from that point
-            }
-            uint128 totalReward;
 
+            uint128 totalReward;
             bool limitedByProviderStakeEnd;
             for (uint i = 0; i < rewardPerDayPerTokenTimeline.length; i++) {
                 if (i > 0) {
@@ -126,7 +121,8 @@ contract ChromiaDelegation is TwoWeeksNoticeProvider {
                     ) *
                     rewardPerDayPerTokenTimeline[rewardPerDayPerTokenTimeline.length - 1].rewardPerDayPerToken;
             }
-            providerReward = totalReward / _states[getCurrentDelegation(account).delegatedTo].rewardFraction;
+            totalReward /= 1000000;
+            providerReward = (totalReward / providerState.rewardFraction);
             reward = totalReward - providerReward;
         }
     }

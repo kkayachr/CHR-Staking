@@ -100,7 +100,7 @@ describe("ChromiaDelegation", function () {
     await time.increase(days(365));
 
     await chromiaDelegation.withdraw(owner.address);
-    let expectedYield = await chromiaDelegation.estimateYield(randomAddresses[0].address);
+    let [expectedYield,] = await chromiaDelegation.estimateYield(randomAddresses[0].address);
     await time.increase(days(365));
     let preBalance = await erc20Mock.balanceOf(randomAddresses[0].address);
     // Claim yield
@@ -117,7 +117,7 @@ describe("ChromiaDelegation", function () {
 
     await chromiaDelegation.withdraw(owner.address);
     await erc20Mock.increaseAllowance(chromiaDelegation.address, 10000000000);
-    let expectedYield = await chromiaDelegation.estimateYield(randomAddresses[0].address);
+    let [expectedYield,] = await chromiaDelegation.estimateYield(randomAddresses[0].address);
     await time.increase(days(365));
 
     await chromiaDelegation.stake(10000000000, days(14));
@@ -141,13 +141,13 @@ describe("ChromiaDelegation", function () {
     await chromiaDelegation.connect(randomAddresses[0]).delegate(owner.address);
     await time.increase(days(365));
 
-    let expectedYield = await chromiaDelegation.estimateYield(randomAddresses[0].address);
+    let [expectedYield,] = await chromiaDelegation.estimateYield(randomAddresses[0].address);
     // User claim yield
     await chromiaDelegation.connect(randomAddresses[0]).claimYield(randomAddresses[0].address);
 
     let providerReward = (await chromiaDelegation.getStakeState(owner.address))[1];
     // ProviderReward has been set
-    await expect(providerReward).to.eq(expectedYield * 0.1);
+    await expect(providerReward).to.eq(expectedYield / 9);
 
     let providerYield = await chromiaDelegation.estimateProviderYield(owner.address);
 
@@ -176,7 +176,7 @@ describe("ChromiaDelegation", function () {
     await chromiaDelegation.connect(randomAddresses[0]).delegate(owner.address);
     await time.increase(days(365));
 
-    let expectedYield = await chromiaDelegation.estimateYield(randomAddresses[0].address);
+    let [expectedYield,] = await chromiaDelegation.estimateYield(randomAddresses[0].address);
     let preBalance = await erc20Mock.balanceOf(randomAddresses[0].address);
     // Claim yield
     await expect(chromiaDelegation.connect(randomAddresses[0]).claimYield(randomAddresses[0].address)).to.not.be.reverted;
@@ -192,7 +192,7 @@ describe("ChromiaDelegation", function () {
 
     let providerReward = await chromiaDelegation.getStakeState(owner.address);
     // ProviderReward has been set
-    await expect(providerReward[1]).to.eq(expectedYield * 0.1);
+    await expect(providerReward[1]).to.eq(expectedYield / 9);
 
     preBalance = await erc20Mock.balanceOf(owner.address);
     // Claim provider delegation reward

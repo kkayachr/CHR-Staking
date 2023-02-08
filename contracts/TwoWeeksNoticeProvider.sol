@@ -114,6 +114,7 @@ contract TwoWeeksNoticeProvider {
         ss.lockedUntil = 0;
         ss.since = uint64(block.timestamp);
         ss.stakeTimeline.push(StakeChange(uint128(block.timestamp), amount));
+        ss.rewardFraction = 10;
         emit StakeUpdate(msg.sender, amount);
     }
 
