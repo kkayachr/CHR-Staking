@@ -18,6 +18,7 @@ contract TwoWeeksNoticeProvider {
         uint64 balance;
         uint64 delegationRewards;
         uint128 processed;
+        uint128 rewardFraction; // E.g. If this number is 10, the provider will get 1/10 of the user reward
         uint64 unlockPeriod; // time it takes from requesting withdraw to being able to withdraw
         uint64 lockedUntil; // 0 if withdraw is not requested
         uint64 since;
@@ -30,6 +31,7 @@ contract TwoWeeksNoticeProvider {
     event WithdrawRequest(address indexed from, uint64 until);
 
     mapping(address => StakeState) internal _states;
+    mapping(address => bool) internal providerWhitelisted;
 
     uint64 public rewardPerDayPerTokenProvider;
     IERC20 internal token;

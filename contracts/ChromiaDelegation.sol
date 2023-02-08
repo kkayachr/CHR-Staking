@@ -17,13 +17,17 @@ interface TwoWeeksNotice {
 }
 
 contract ChromiaDelegation is TwoWeeksNoticeProvider {
-    uint64 public rewardPerDayPerToken;
     TwoWeeksNotice public twn;
 
     struct DelegationChange {
         uint128 timePoint;
         uint128 balance;
         address delegatedTo;
+    }
+
+    struct RewardPerDayPerTokenChange {
+        uint128 timePoint;
+        uint128 rewardPerDayPerToken;
     }
 
     struct Delegation {
@@ -34,6 +38,7 @@ contract ChromiaDelegation is TwoWeeksNoticeProvider {
     }
 
     mapping(address => Delegation) public delegations;
+    RewardPerDayPerTokenChange[] public rewardPerDayPerTokenTimeline;
 
     constructor(
         IERC20 _token,
@@ -43,16 +48,20 @@ contract ChromiaDelegation is TwoWeeksNoticeProvider {
         uint64 inital_reward_provider
     ) TwoWeeksNoticeProvider(_token, _owner, inital_reward_provider) {
         twn = _twn;
-        rewardPerDayPerToken = inital_reward;
+        rewardPerDayPerTokenTimeline.push(RewardPerDayPerTokenChange(uint128(block.timestamp), inital_reward));
     }
 
     function setRewardRate(uint64 rewardRate) external {
         require(msg.sender == owner);
-        rewardPerDayPerToken = rewardRate;
+        rewardPerDayPerTokenTimeline.push(RewardPerDayPerTokenChange(uint128(block.timestamp), rewardRate));
     }
 
     function verifyRemoteAccumulated(uint128 remoteAccumulated, address account) public view {
-        uint128 localAccumulated = estimateAccumulatedFrom(account, delegations[account].processedDate);
+        uint128 localAccumulated = estimateAccumulatedFromTo(
+            account,
+            delegations[account].processedDate,
+            uint128(block.timestamp)
+        );
 
         require(
             localAccumulated > (remoteAccumulated - delegations[account].processed) - 10,
@@ -64,11 +73,13 @@ contract ChromiaDelegation is TwoWeeksNoticeProvider {
         );
     }
 
-    function estimateYield(address account) public view returns (uint128 reward) {
+    function estimateYield(address account) public view returns (uint128 reward, uint128 providerReward) {
         uint128 prevPaid = delegations[account].processed;
         (uint128 acc, ) = twn.estimateAccumulated(account);
         if (acc > prevPaid) {
             verifyRemoteAccumulated(acc, account);
+
+            // See if provider has ever withdrawn during the delegation
             StakeState memory providerState = _states[getCurrentDelegation(account).delegatedTo];
             uint128 providerStakeEnd;
             for (uint256 i = 0; i < providerState.stakeTimeline.length; i++) {
@@ -80,28 +91,61 @@ contract ChromiaDelegation is TwoWeeksNoticeProvider {
                     break;
                 }
             }
+            // Remove all accumulated from the point of provider withdrawal
             uint128 subtractedYield;
             if (providerStakeEnd > 0) {
-                subtractedYield = estimateAccumulatedFrom(account, providerStakeEnd); // If provider has ended stake, subtract from that point
+                subtractedYield = estimateAccumulatedFromTo(account, providerStakeEnd, uint128(block.timestamp)); // If provider has ended stake, subtract from that point
             }
-            uint128 delta = acc - prevPaid - subtractedYield;
-            reward = (rewardPerDayPerToken * delta) / 1000000;
+            uint128 totalReward;
+
+            bool limitedByProviderStakeEnd;
+            for (uint i = 0; i < rewardPerDayPerTokenTimeline.length; i++) {
+                if (i > 0) {
+                    uint128 rewardUntil = (providerStakeEnd < rewardPerDayPerTokenTimeline[i].timePoint && providerStakeEnd != 0)
+                        ? providerStakeEnd
+                        : rewardPerDayPerTokenTimeline[i].timePoint;
+                    totalReward +=
+                        estimateAccumulatedFromTo(account, rewardPerDayPerTokenTimeline[i - 1].timePoint, rewardUntil) *
+                        rewardPerDayPerTokenTimeline[i].rewardPerDayPerToken;
+                    if (rewardUntil == providerStakeEnd) {
+                        limitedByProviderStakeEnd = true;
+                        break;
+                    }
+                }
+            }
+
+            if (!limitedByProviderStakeEnd) {
+                uint128 rewardUntil = (providerStakeEnd < uint128(block.timestamp) && providerStakeEnd != 0)
+                    ? providerStakeEnd
+                    : uint128(block.timestamp);
+                totalReward +=
+                    estimateAccumulatedFromTo(
+                        account,
+                        rewardPerDayPerTokenTimeline[rewardPerDayPerTokenTimeline.length - 1].timePoint,
+                        rewardUntil
+                    ) *
+                    rewardPerDayPerTokenTimeline[rewardPerDayPerTokenTimeline.length - 1].rewardPerDayPerToken;
+            }
+            providerReward = totalReward / _states[getCurrentDelegation(account).delegatedTo].rewardFraction;
+            reward = totalReward - providerReward;
         }
     }
 
     // If provider has stopped providing, we want to subtract "accumulated token days" from that point.
-    function estimateAccumulatedFrom(address account, uint128 from) private view returns (uint128 subtractedYield) {
+    function estimateAccumulatedFromTo(address account, uint128 from, uint128 to) private view returns (uint128 accumulated) {
         uint128 prevTimepoint;
         uint128 deltaTime;
         if (delegations[account].delegationTimeline.length > 1) {
-            for (uint256 i = 0; i < delegations[account].delegationTimeline.length; i++) {
+            for (uint256 i = 1; i < delegations[account].delegationTimeline.length; i++) {
+                // TODO: "i" should be 1?
+                if (delegations[account].delegationTimeline[i].timePoint > to) break;
                 if (delegations[account].delegationTimeline[i].timePoint > from) {
                     prevTimepoint = (from > delegations[account].delegationTimeline[i - 1].timePoint)
                         ? from
                         : delegations[account].delegationTimeline[i - 1].timePoint;
 
                     deltaTime = delegations[account].delegationTimeline[i].timePoint - prevTimepoint;
-                    subtractedYield += deltaTime * delegations[account].delegationTimeline[i - 1].balance;
+                    accumulated += deltaTime * delegations[account].delegationTimeline[i - 1].balance;
                 }
             }
         }
@@ -110,25 +154,22 @@ contract ChromiaDelegation is TwoWeeksNoticeProvider {
             ? from
             : delegations[account].delegationTimeline[delegations[account].delegationTimeline.length - 1].timePoint;
 
-        deltaTime = uint128(block.timestamp) - prevTimepoint;
-        subtractedYield +=
+        deltaTime = to - prevTimepoint;
+        accumulated +=
             deltaTime *
             delegations[account].delegationTimeline[delegations[account].delegationTimeline.length - 1].balance;
-        subtractedYield = subtractedYield / 86400;
+        accumulated = accumulated / 86400;
     }
 
     function claimYield(address account) public {
         require(delegations[account].delegationTimeline.length > 0, 'Address must make a first delegation.');
-        uint128 reward = estimateYield(account);
+        (uint128 reward, uint128 providerReward) = estimateYield(account);
         if (reward > 0) {
             (uint128 acc, ) = twn.estimateAccumulated(account);
             delegations[account].processed = acc;
             delegations[account].processedDate = uint128(block.timestamp);
             token.transfer(account, reward);
-            addDelegationReward(
-                uint64(reward / 10), // TODO: Change to correct reward percentage for provider.
-                getCurrentDelegation(account).delegatedTo
-            );
+            addDelegationReward(uint64(providerReward), getCurrentDelegation(account).delegatedTo);
         }
     }
 
