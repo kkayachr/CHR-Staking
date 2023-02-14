@@ -107,19 +107,16 @@ contract ChromiaDelegation is TwoWeeksNoticeProvider {
         if (currentEpoch - 1 > processedEpoch) {
             verifyRemoteAccumulated(account); // verify that TWN and ChromiaDelegation are synced
 
-            console.log('curr %s', currentEpoch);
             uint128 totalReward;
             RewardPerDayPerTokenChange memory activeRate = getActiveRate(processedEpoch + 1);
             DelegationChange memory activeDelegation = getActiveDelegation(account, processedEpoch + 1);
             StakeState storage providerState = _states[activeDelegation.delegatedTo];
             for (uint32 i = uint32(processedEpoch) + 1; i < currentEpoch - 1; i++) {
-                console.log(i);
                 activeRate = rewardPerDayPerTokenTimeline[i].timePoint > 0 ? rewardPerDayPerTokenTimeline[i] : activeRate;
                 activeDelegation = userState.delegationTimeline[i].timePoint > 0
                     ? userState.delegationTimeline[i]
                     : activeDelegation;
                 if (providerState.stakeTimeline[i].timePoint > 0 && providerState.stakeTimeline[i].balance == 0) {
-                    console.log('PROVIDER STOPPED STAKING! EPOCH %s', i);
                     break;
                 } else {
                     if (providerState.stakeTimeline[i].timePoint == 0) {
