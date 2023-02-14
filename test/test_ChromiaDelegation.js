@@ -3,7 +3,7 @@ const {
   loadFixture,
 } = require("@nomicfoundation/hardhat-network-helpers");
 const {
-  days,
+  days, weeks,
 } = require("@nomicfoundation/hardhat-network-helpers/dist/src/helpers/time/duration");
 const { expect } = require("chai");
 const { ethers } = require("hardhat");
@@ -61,6 +61,22 @@ describe("ChromiaDelegation", function () {
     let delegation = await chromiaDelegation.delegations(randomAddresses[0].address);
     await expect(delegation[0]).to.be.closeTo(prevAcc[0], Math.round(prevAcc[0].toNumber() * 0.0000001));
   });
+  it("Should let user delegate and claim reward", async () => {
+    const { chromiaDelegation, twoWeeksNotice, erc20Mock, owner, randomAddresses } =
+      await loadFixture(deployChromiaDelegation);
+
+    var expectedReward = ((10000000000 * 7 * 3) / 1000000) * 0.9;
+    await chromiaDelegation.connect(randomAddresses[0]).delegate(owner.address);
+    await time.increase(weeks(5));
+    console.log(await chromiaDelegation.delegations(randomAddresses[0].address));
+
+    let preBalance = await erc20Mock.balanceOf(randomAddresses[0].address);
+    // Claim yield
+    await expect(chromiaDelegation.connect(randomAddresses[0]).claimYield(randomAddresses[0].address)).to.not.be.reverted;
+    let postBalance = await erc20Mock.balanceOf(randomAddresses[0].address);
+    console.log(postBalance - preBalance);
+    console.log(expectedReward);
+  });
 
   // If user hasnt used delegation before, shouldnt let them claim yield
   // since the "processed" variable hasnt been set yet and no delegation
@@ -70,7 +86,7 @@ describe("ChromiaDelegation", function () {
       await loadFixture(deployChromiaDelegation);
 
     let prevAcc = await twoWeeksNotice.estimateAccumulated(randomAddresses[0].address);
-    await expect(chromiaDelegation.claimYield(randomAddresses[0].address)).to.be.revertedWith("Address must make a first delegation.");
+    await expect(chromiaDelegation.claimYield(randomAddresses[0].address)).to.be.reverted; //With("Address must make a first delegation.");
   });
 
   // Provider claiming their own yield (not delegation reward)

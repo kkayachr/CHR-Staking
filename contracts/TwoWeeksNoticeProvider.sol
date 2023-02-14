@@ -7,6 +7,7 @@
 pragma solidity ^0.8.17;
 
 import '@openzeppelin/contracts/token/ERC20/IERC20.sol';
+import 'hardhat/console.sol';
 
 contract TwoWeeksNoticeProvider {
     struct StakeChange {
@@ -24,7 +25,7 @@ contract TwoWeeksNoticeProvider {
         uint64 since;
         uint128 accumulated; // token-days staked
         uint128 accumulatedStrict; // token-days staked sans withdraw periods
-        StakeChange[] stakeTimeline;
+        mapping(uint32 => StakeChange) stakeTimeline;
     }
 
     event StakeUpdate(address indexed from, uint64 balance);
@@ -36,6 +37,8 @@ contract TwoWeeksNoticeProvider {
     uint64 public rewardPerDayPerTokenProvider;
     IERC20 internal token;
     address public owner;
+    uint internal startTime = block.timestamp;
+    uint internal epochLength = 1 weeks;
 
     constructor(IERC20 _token, address _owner, uint64 _rewardPerDayPerTokenProvider) {
         token = _token;
@@ -113,7 +116,7 @@ contract TwoWeeksNoticeProvider {
         ss.unlockPeriod = unlockPeriod;
         ss.lockedUntil = 0;
         ss.since = uint64(block.timestamp);
-        ss.stakeTimeline.push(StakeChange(uint128(block.timestamp), amount));
+        ss.stakeTimeline[getCurrentEpoch() + 1] = StakeChange(uint128(block.timestamp), amount);
         ss.rewardFraction = 10;
         emit StakeUpdate(msg.sender, amount);
     }
@@ -137,7 +140,7 @@ contract TwoWeeksNoticeProvider {
         ss.unlockPeriod = 0;
         ss.lockedUntil = 0;
         ss.since = 0;
-        ss.stakeTimeline.push(StakeChange(uint128(block.timestamp), 0));
+        ss.stakeTimeline[getCurrentEpoch() + 1] = StakeChange(uint128(block.timestamp), 0);
         require(token.transfer(to, balance), 'transfer unsuccessful');
         emit StakeUpdate(msg.sender, 0);
     }
@@ -181,5 +184,18 @@ contract TwoWeeksNoticeProvider {
         _states[msg.sender].processed = acc;
         _states[msg.sender].delegationRewards = 0;
         token.transfer(msg.sender, reward);
+    }
+
+    function getCurrentEpoch() public view returns (uint32) {
+        return getEpoch(block.timestamp);
+    }
+
+    function getEpoch(uint time) public view returns (uint32) {
+        require(time > startTime, 'Time must be larger than starttime');
+        return uint32((time - startTime) / epochLength);
+    }
+
+    function getEpochTime(uint32 epoch) public view returns (uint128) {
+        return uint32(startTime + epoch * epochLength);
     }
 }
