@@ -61,9 +61,13 @@ contract ChromiaDelegationSync {
         uint128 prevTimepoint;
         uint128 deltaTime;
         DelegationState storage userDelegation = delegations[account];
+        uint lastIndex;
         if (userDelegation.delegationChanges.length > 1) {
             for (uint256 i = 1; i < delegations[account].delegationChanges.length; i++) {
-                if (userDelegation.delegationChanges[i].timePoint > to) break;
+                lastIndex = i;
+                if (userDelegation.delegationChanges[i].timePoint > to) {
+                    break;
+                }
                 if (userDelegation.delegationChanges[i].timePoint > from) {
                     prevTimepoint = (from > userDelegation.delegationChanges[i - 1].timePoint)
                         ? from
@@ -74,12 +78,12 @@ contract ChromiaDelegationSync {
                 }
             }
         }
-        prevTimepoint = (from > userDelegation.delegationChanges[userDelegation.delegationChanges.length - 1].timePoint)
+        prevTimepoint = (from > userDelegation.delegationChanges[lastIndex].timePoint)
             ? from
-            : userDelegation.delegationChanges[userDelegation.delegationChanges.length - 1].timePoint;
+            : userDelegation.delegationChanges[lastIndex].timePoint;
 
         deltaTime = to - prevTimepoint;
-        accumulated += deltaTime * userDelegation.delegationChanges[userDelegation.delegationChanges.length - 1].balance;
+        accumulated += deltaTime * userDelegation.delegationChanges[lastIndex].balance;
         accumulated = accumulated / 86400;
     }
 }

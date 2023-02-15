@@ -77,8 +77,11 @@ contract ChromiaDelegation is TwoWeeksNoticeProvider, ChromiaDelegationSync {
                 activeDelegation = userState.delegationTimeline[i].timePoint > 0
                     ? userState.delegationTimeline[i]
                     : activeDelegation;
+
                 if (providerState.stakeTimeline[i].timePoint > 0 && providerState.stakeTimeline[i].balance == 0) {
                     break;
+                } else if (activeDelegation.delegatedTo == address(0)) {
+                    continue;
                 } else {
                     if (providerState.stakeTimeline[i].timePoint == 0) {
                         providerState = _states[activeDelegation.delegatedTo];
@@ -86,6 +89,8 @@ contract ChromiaDelegation is TwoWeeksNoticeProvider, ChromiaDelegationSync {
                     totalReward += uint128(activeRate.rewardPerDayPerToken * activeDelegation.balance * epochLength);
                 }
             }
+
+            if (totalReward == 0) return (0, 0);
             totalReward /= 1000000 * 86400;
             providerReward = totalReward / providerState.rewardFraction;
             reward = totalReward - providerReward;
@@ -118,7 +123,7 @@ contract ChromiaDelegation is TwoWeeksNoticeProvider, ChromiaDelegationSync {
 
     function undelegate() public {
         uint32 currentEpoch = getCurrentEpoch();
-        DelegationChange memory currentDelegation = getActiveDelegation(msg.sender, currentEpoch);
+        DelegationChange memory currentDelegation = getActiveDelegation(msg.sender, currentEpoch + 1);
         changeDelegation(currentDelegation.balance, address(0));
     }
 

@@ -66,15 +66,28 @@ describe("ChromiaDelegation", function () {
       await loadFixture(deployChromiaDelegation);
 
     var expectedReward = ((10000000000 * 7 * 4) / 1000000) * 0.9;
+
     await chromiaDelegation.connect(randomAddresses[0]).delegate(owner.address);
     await time.increase(weeks(6));
-    console.log(await chromiaDelegation.delegations(randomAddresses[0].address));
 
     let preBalance = await erc20Mock.balanceOf(randomAddresses[0].address);
     // Claim yield
     await expect(chromiaDelegation.connect(randomAddresses[0]).claimYield(randomAddresses[0].address)).to.not.be.reverted;
     let postBalance = await erc20Mock.balanceOf(randomAddresses[0].address);
+
     await expect(postBalance - preBalance).to.eq(expectedReward);
+  });
+  it("Should let user delegate and undelegate reward", async () => {
+    const { chromiaDelegation, twoWeeksNotice, erc20Mock, owner, randomAddresses } =
+      await loadFixture(deployChromiaDelegation);
+
+    await chromiaDelegation.connect(randomAddresses[0]).delegate(owner.address);
+    await chromiaDelegation.connect(randomAddresses[0]).undelegate();
+
+    await time.increase(weeks(6));
+    // Claim yield
+    await chromiaDelegation.connect(randomAddresses[0]).claimYield(randomAddresses[0].address);
+
   });
 
   // If user hasnt used delegation before, shouldnt let them claim yield
@@ -84,8 +97,7 @@ describe("ChromiaDelegation", function () {
     const { chromiaDelegation, twoWeeksNotice, erc20Mock, owner, randomAddresses } =
       await loadFixture(deployChromiaDelegation);
 
-    let prevAcc = await twoWeeksNotice.estimateAccumulated(randomAddresses[0].address);
-    await expect(chromiaDelegation.claimYield(randomAddresses[0].address)).to.be.reverted; //With("Address must make a first delegation.");
+    await expect(chromiaDelegation.claimYield(randomAddresses[0].address)).to.be.revertedWith("Address must make a first delegation.");
   });
 
   // Provider claiming their own yield (not delegation reward)
@@ -146,6 +158,38 @@ describe("ChromiaDelegation", function () {
     let postBalance = await erc20Mock.balanceOf(randomAddresses[0].address);
     var expectedReward = ((10000000000 * 7 * 5) / 1000000) * 0.9;
     await expect(postBalance - preBalance).to.eq(expectedReward);
+  });
+
+  it("Should let provider claim delegator rewards", async () => {
+    const { chromiaDelegation, twoWeeksNotice, erc20Mock, owner, randomAddresses } =
+      await loadFixture(deployChromiaDelegation);
+
+    // User delegates stake
+    await chromiaDelegation.connect(randomAddresses[0]).delegate(owner.address);
+    await time.increase(days(365));
+
+    let [expectedYield,] = await chromiaDelegation.estimateYield(randomAddresses[0].address);
+    // User claim yield
+    await chromiaDelegation.connect(randomAddresses[0]).claimYield(randomAddresses[0].address);
+
+    let providerReward = (await chromiaDelegation.getStakeState(owner.address))[1];
+    // ProviderReward has been set
+    await expect(providerReward).to.eq(expectedYield / 9);
+
+    let providerYield = await chromiaDelegation.estimateProviderYield(owner.address);
+
+    preBalance = await erc20Mock.balanceOf(owner.address);
+    let expectedProcessed = (await chromiaDelegation.estimateAccumulated(owner.address))[0];
+    // Claim provider delegation reward
+    await chromiaDelegation.claimDelegationReward();
+    postBalance = await erc20Mock.balanceOf(owner.address);
+
+    // Provider has received fee
+    await expect(postBalance - preBalance).to.eq(providerReward.toNumber());
+
+    // Provider fee zero'd
+    providerStakeState = await chromiaDelegation.getStakeState(owner.address);
+    await expect(providerStakeState[1]).to.eq(0);
   });
 
   // Provider claiming delegation reward + their own yield

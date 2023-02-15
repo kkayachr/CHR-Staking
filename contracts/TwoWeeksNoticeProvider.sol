@@ -38,7 +38,7 @@ contract TwoWeeksNoticeProvider {
     IERC20 internal token;
     address public owner;
     uint internal startTime = block.timestamp;
-    uint internal epochLength = 1 weeks;
+    uint public epochLength = 1 weeks;
 
     constructor(IERC20 _token, address _owner, uint64 _rewardPerDayPerTokenProvider) {
         token = _token;
