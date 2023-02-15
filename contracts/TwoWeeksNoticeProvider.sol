@@ -10,9 +10,11 @@ import '@openzeppelin/contracts/token/ERC20/IERC20.sol';
 import 'hardhat/console.sol';
 
 contract TwoWeeksNoticeProvider {
-    struct StakeChange {
+    struct StakeEpoch {
         uint128 timePoint;
         uint128 balance;
+        // uint128 RewardClaimedEpoch;
+        uint128 numUsers;
     }
 
     struct StakeState {
@@ -25,7 +27,7 @@ contract TwoWeeksNoticeProvider {
         uint64 since;
         uint128 accumulated; // token-days staked
         uint128 accumulatedStrict; // token-days staked sans withdraw periods
-        mapping(uint32 => StakeChange) stakeTimeline;
+        mapping(uint32 => StakeEpoch) stakeTimeline;
     }
 
     event StakeUpdate(address indexed from, uint64 balance);
@@ -35,6 +37,7 @@ contract TwoWeeksNoticeProvider {
     mapping(address => bool) internal providerWhitelisted;
 
     uint64 public rewardPerDayPerTokenProvider;
+    uint128 public rewardPerEpoch = 10000000000;
     IERC20 internal token;
     address public owner;
     uint internal startTime = block.timestamp;
@@ -116,7 +119,8 @@ contract TwoWeeksNoticeProvider {
         ss.unlockPeriod = unlockPeriod;
         ss.lockedUntil = 0;
         ss.since = uint64(block.timestamp);
-        ss.stakeTimeline[getCurrentEpoch() + 1] = StakeChange(uint128(block.timestamp), amount);
+        ss.stakeTimeline[getCurrentEpoch() + 1].timePoint = uint128(block.timestamp);
+        ss.stakeTimeline[getCurrentEpoch() + 1].balance = amount;
         ss.rewardFraction = 10;
         emit StakeUpdate(msg.sender, amount);
     }
@@ -140,7 +144,8 @@ contract TwoWeeksNoticeProvider {
         ss.unlockPeriod = 0;
         ss.lockedUntil = 0;
         ss.since = 0;
-        ss.stakeTimeline[getCurrentEpoch() + 1] = StakeChange(uint128(block.timestamp), 0);
+        ss.stakeTimeline[getCurrentEpoch() + 1].timePoint = uint128(block.timestamp);
+        ss.stakeTimeline[getCurrentEpoch() + 1].balance = 0;
         require(token.transfer(to, balance), 'transfer unsuccessful');
         emit StakeUpdate(msg.sender, 0);
     }

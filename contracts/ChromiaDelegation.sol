@@ -59,6 +59,9 @@ contract ChromiaDelegation is TwoWeeksNoticeProvider, ChromiaDelegationSync {
             delegatedTo
         );
         userState.delegationChanges.push(DelegationChange(uint128(block.timestamp), balance, delegatedTo));
+        DelegationChange memory currentDelegation = getActiveDelegation(msg.sender, currentEpoch + 1);
+        _states[currentDelegation.delegatedTo].stakeTimeline[currentEpoch + 1].numUsers -= 1;
+        _states[delegatedTo].stakeTimeline[currentEpoch + 1].numUsers += 1;
     }
 
     function estimateYield(address account) public view returns (uint128 reward, uint128 providerReward) {
@@ -86,7 +89,8 @@ contract ChromiaDelegation is TwoWeeksNoticeProvider, ChromiaDelegationSync {
                     if (providerState.stakeTimeline[i].timePoint == 0) {
                         providerState = _states[activeDelegation.delegatedTo];
                     }
-                    totalReward += uint128(activeRate.rewardPerDayPerToken * activeDelegation.balance * epochLength);
+                    // totalReward += uint128(activeRate.rewardPerDayPerToken * activeDelegation.balance * epochLength);
+                    totalReward += rewardPerEpoch / 1;
                 }
             }
 
