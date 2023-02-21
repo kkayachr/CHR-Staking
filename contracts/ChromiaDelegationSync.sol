@@ -47,7 +47,7 @@ contract ChromiaDelegationSync {
         twn = _twn;
     }
 
-    function verifyRemoteAccumulated(address account) internal view {
+    function verifyRemoteAccumulated(address account, uint128 tolerance) internal view {
         (, uint128 remoteAccumulated) = twn.estimateAccumulated(account);
         uint128 localAccumulated = estimateAccumulatedFromTo(
             account,

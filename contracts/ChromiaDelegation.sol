@@ -96,6 +96,17 @@ contract ChromiaDelegation is ChromiaDelegationSync, TwoWeeksNoticeProvider {
         }
     }
 
+    function syncWithdrawRequest() external {
+        (, , uint64 lockedUntil, ) = twn.getStakeState(msg.sender);
+        require(lockedUntil > 0, 'Withdraw has not been requested');
+        DelegationState storage userState = delegations[msg.sender];
+
+        uint64 requestTime = lockedUntil - 2 weeks;
+        userState.stakeTimeline.push(StakeChange(uint128(requestTime), 0));
+        uint32 requestEpoch = getEpoch(requestTime);
+        userState.delegationTimeline[requestEpoch + 2] = DelegationChange(uint128(getEpochTime(requestEpoch + 2)), 0, address(0));
+    }
+
     function claimYield(address account) public {
         require(delegations[account].stakeTimeline.length > 0, 'Address must make a first delegation.');
         require(delegations[account].processedDate > 0, 'Address must be processed.');
@@ -108,18 +119,6 @@ contract ChromiaDelegation is ChromiaDelegationSync, TwoWeeksNoticeProvider {
 
             addDelegationReward(uint64(providerReward), getActiveDelegation(account, getCurrentEpoch()).delegatedTo);
         }
-    }
-
-    function requestWithdraw() external {
-        twn.requestWithdraw();
-        DelegationState storage userState = delegations[msg.sender];
-        userState.stakeTimeline.push(StakeChange(uint128(block.timestamp), 0));
-        uint32 currentEpoch = getCurrentEpoch();
-        userState.delegationTimeline[currentEpoch + 2] = DelegationChange(uint128(getEpochTime(currentEpoch + 2)), 0, address(0));
-    }
-
-    function withdraw(address to) external {
-        twn.withdraw(to);
     }
 
     function delegate(address to) public {
