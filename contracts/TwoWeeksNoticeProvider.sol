@@ -8,13 +8,9 @@ pragma solidity ^0.8.17;
 
 import '@openzeppelin/contracts/token/ERC20/IERC20.sol';
 import 'hardhat/console.sol';
+import './ChromiaDelegationSync.sol';
 
 contract TwoWeeksNoticeProvider {
-    struct StakeChange {
-        uint128 timePoint;
-        uint128 balance;
-    }
-
     struct StakeState {
         uint64 balance;
         uint64 delegationRewards;
@@ -121,7 +117,7 @@ contract TwoWeeksNoticeProvider {
         emit StakeUpdate(msg.sender, amount);
     }
 
-    function requestWithdraw() external {
+    function requestWithdrawProvider() external {
         StakeState storage ss = _states[msg.sender];
         require(ss.balance > 0);
         updateAccumulated(ss);
@@ -129,7 +125,7 @@ contract TwoWeeksNoticeProvider {
         ss.lockedUntil = uint64(block.timestamp + ss.unlockPeriod);
     }
 
-    function withdraw(address to) external {
+    function withdrawProvider(address to) external {
         StakeState storage ss = _states[msg.sender];
         require(ss.balance > 0, 'must have tokens to withdraw');
         // require(ss.lockedUntil != 0, 'unlock not requested');
