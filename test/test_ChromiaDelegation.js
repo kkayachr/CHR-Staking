@@ -87,7 +87,41 @@ describe("ChromiaDelegation", function () {
     await time.increase(weeks(6));
     // Claim yield
     await chromiaDelegation.connect(randomAddresses[0]).claimYield(randomAddresses[0].address);
+  });
+  it("Should not give user delegation reward when withdraw their stake directly from TWN", async () => {
+    const { chromiaDelegation, twoWeeksNotice, erc20Mock, owner, randomAddresses } =
+      await loadFixture(deployChromiaDelegation);
 
+    await chromiaDelegation.connect(randomAddresses[0]).delegate(owner.address);
+    await time.increase(weeks(3));
+    await twoWeeksNotice.connect(randomAddresses[0]).requestWithdraw();
+    await time.increase(weeks(3));
+
+    let preBalance = await erc20Mock.balanceOf(randomAddresses[0].address);
+    // Claim yield
+    await expect(chromiaDelegation.connect(randomAddresses[0]).claimYield(randomAddresses[0].address)).
+      to.be.revertedWith("Accumulated doesnt match with TWN");
+    let postBalance = await erc20Mock.balanceOf(randomAddresses[0].address);
+
+    await expect(postBalance - preBalance).to.eq(0);
+  });
+
+  it("Should give user delegation reward when withdraw their stake through ChromiaDelegation", async () => {
+    const { chromiaDelegation, twoWeeksNotice, erc20Mock, owner, randomAddresses } =
+      await loadFixture(deployChromiaDelegation);
+
+    await chromiaDelegation.connect(randomAddresses[0]).delegate(owner.address);
+    await time.increase(weeks(3));
+    await twoWeeksNotice.connect(randomAddresses[0]).requestWithdraw();
+    await time.increase(weeks(1));
+
+    let preBalance = await erc20Mock.balanceOf(randomAddresses[0].address);
+    // Claim yield
+    await expect(chromiaDelegation.connect(randomAddresses[0]).claimYield(randomAddresses[0].address)).
+      to.be.revertedWith("Accumulated doesnt match with TWN");
+    let postBalance = await erc20Mock.balanceOf(randomAddresses[0].address);
+
+    await expect(postBalance - preBalance).to.eq(0);
   });
 
   // If user hasnt used delegation before, shouldnt let them claim yield
@@ -126,7 +160,7 @@ describe("ChromiaDelegation", function () {
     await chromiaDelegation.connect(randomAddresses[0]).delegate(owner.address);
     await time.increase(weeks(5));
 
-    await chromiaDelegation.withdraw(owner.address);
+    await chromiaDelegation.withdrawProvider(owner.address);
     await time.increase(weeks(5));
     let preBalance = await erc20Mock.balanceOf(randomAddresses[0].address);
     // Claim yield
@@ -142,14 +176,14 @@ describe("ChromiaDelegation", function () {
     await chromiaDelegation.connect(randomAddresses[0]).delegate(owner.address);
     await time.increase(weeks(5));
 
-    await chromiaDelegation.withdraw(owner.address);
+    await chromiaDelegation.withdrawProvider(owner.address);
     await erc20Mock.increaseAllowance(chromiaDelegation.address, 10000000000);
     let [expectedYield,] = await chromiaDelegation.estimateYield(randomAddresses[0].address);
     await time.increase(weeks(5));
 
     await chromiaDelegation.stake(10000000000, days(14));
     await time.increase(weeks(5));
-    await chromiaDelegation.withdraw(owner.address);
+    await chromiaDelegation.withdrawProvider(owner.address);
     await time.increase(weeks(5));
 
     let preBalance = await erc20Mock.balanceOf(randomAddresses[0].address);

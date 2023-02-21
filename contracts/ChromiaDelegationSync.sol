@@ -14,6 +14,15 @@ interface TwoWeeksNotice {
     function estimateAccumulated(address account) external view returns (uint128, uint128);
 
     function getStakeState(address account) external view returns (uint64, uint64, uint64, uint64);
+
+    function requestWithdraw() external;
+
+    function withdraw(address to) external;
+}
+
+struct StakeChange {
+    uint128 timePoint;
+    uint128 balance;
 }
 
 contract ChromiaDelegationSync {
@@ -28,7 +37,7 @@ contract ChromiaDelegationSync {
     struct DelegationState {
         uint128 processed;
         uint128 processedDate;
-        DelegationChange[] delegationChanges;
+        StakeChange[] stakeTimeline;
         mapping(uint32 => DelegationChange) delegationTimeline; // each uint key is a week starting from "startTime"
     }
 
@@ -39,7 +48,7 @@ contract ChromiaDelegationSync {
     }
 
     function verifyRemoteAccumulated(address account) internal view {
-        (uint128 remoteAccumulated, ) = twn.estimateAccumulated(account);
+        (, uint128 remoteAccumulated) = twn.estimateAccumulated(account);
         uint128 localAccumulated = estimateAccumulatedFromTo(
             account,
             delegations[account].processedDate,
@@ -62,28 +71,28 @@ contract ChromiaDelegationSync {
         uint128 deltaTime;
         DelegationState storage userDelegation = delegations[account];
         uint lastIndex;
-        if (userDelegation.delegationChanges.length > 1) {
-            for (uint256 i = 1; i < delegations[account].delegationChanges.length; i++) {
+        if (userDelegation.stakeTimeline.length > 1) {
+            for (uint256 i = 1; i < delegations[account].stakeTimeline.length; i++) {
                 lastIndex = i;
-                if (userDelegation.delegationChanges[i].timePoint > to) {
+                if (userDelegation.stakeTimeline[i].timePoint > to) {
                     break;
                 }
-                if (userDelegation.delegationChanges[i].timePoint > from) {
-                    prevTimepoint = (from > userDelegation.delegationChanges[i - 1].timePoint)
+                if (userDelegation.stakeTimeline[i].timePoint > from) {
+                    prevTimepoint = (from > userDelegation.stakeTimeline[i - 1].timePoint)
                         ? from
-                        : userDelegation.delegationChanges[i - 1].timePoint;
+                        : userDelegation.stakeTimeline[i - 1].timePoint;
 
-                    deltaTime = userDelegation.delegationChanges[i].timePoint - prevTimepoint;
-                    accumulated += deltaTime * userDelegation.delegationChanges[i - 1].balance;
+                    deltaTime = userDelegation.stakeTimeline[i].timePoint - prevTimepoint;
+                    accumulated += deltaTime * userDelegation.stakeTimeline[i - 1].balance;
                 }
             }
         }
-        prevTimepoint = (from > userDelegation.delegationChanges[lastIndex].timePoint)
+        prevTimepoint = (from > userDelegation.stakeTimeline[lastIndex].timePoint)
             ? from
-            : userDelegation.delegationChanges[lastIndex].timePoint;
+            : userDelegation.stakeTimeline[lastIndex].timePoint;
 
         deltaTime = to - prevTimepoint;
-        accumulated += deltaTime * userDelegation.delegationChanges[lastIndex].balance;
+        accumulated += deltaTime * userDelegation.stakeTimeline[lastIndex].balance;
         accumulated = accumulated / 86400;
     }
 }

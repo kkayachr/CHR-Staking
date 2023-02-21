@@ -11,7 +11,7 @@ import './TwoWeeksNoticeProvider.sol';
 import './ChromiaDelegationSync.sol';
 import 'hardhat/console.sol';
 
-contract ChromiaDelegation is TwoWeeksNoticeProvider, ChromiaDelegationSync {
+contract ChromiaDelegation is ChromiaDelegationSync, TwoWeeksNoticeProvider {
     struct RewardPerDayPerTokenChange {
         uint128 timePoint;
         uint128 rewardPerDayPerToken;
@@ -25,8 +25,7 @@ contract ChromiaDelegation is TwoWeeksNoticeProvider, ChromiaDelegationSync {
         address _owner,
         uint64 inital_reward,
         uint64 inital_reward_provider
-    ) TwoWeeksNoticeProvider(_token, _owner, inital_reward_provider) ChromiaDelegationSync(_twn) {
-        twn = _twn;
+    ) ChromiaDelegationSync(_twn) TwoWeeksNoticeProvider(_token, _owner, inital_reward_provider) {
         rewardPerDayPerTokenTimeline[0] = RewardPerDayPerTokenChange(uint128(block.timestamp), inital_reward);
     }
 
@@ -58,7 +57,7 @@ contract ChromiaDelegation is TwoWeeksNoticeProvider, ChromiaDelegationSync {
             balance,
             delegatedTo
         );
-        userState.delegationChanges.push(DelegationChange(uint128(block.timestamp), balance, delegatedTo));
+        userState.stakeTimeline.push(StakeChange(uint128(block.timestamp), balance));
     }
 
     function estimateYield(address account) public view returns (uint128 reward, uint128 providerReward) {
@@ -98,7 +97,7 @@ contract ChromiaDelegation is TwoWeeksNoticeProvider, ChromiaDelegationSync {
     }
 
     function claimYield(address account) public {
-        require(delegations[account].delegationChanges.length > 0, 'Address must make a first delegation.');
+        require(delegations[account].stakeTimeline.length > 0, 'Address must make a first delegation.');
         require(delegations[account].processedDate > 0, 'Address must be processed.');
         (uint128 reward, uint128 providerReward) = estimateYield(account);
         if (reward > 0) {
@@ -111,17 +110,32 @@ contract ChromiaDelegation is TwoWeeksNoticeProvider, ChromiaDelegationSync {
         }
     }
 
+    function requestWithdraw() external {
+        twn.requestWithdraw();
+        DelegationState storage userState = delegations[msg.sender];
+        userState.stakeTimeline.push(StakeChange(uint128(block.timestamp), 0));
+        uint32 currentEpoch = getCurrentEpoch();
+        userState.delegationTimeline[currentEpoch + 2] = DelegationChange(uint128(getEpochTime(currentEpoch + 2)), 0, address(0));
+    }
+
+    function withdraw(address to) external {
+        twn.withdraw(to);
+    }
+
     function delegate(address to) public {
         DelegationState storage userDelegation = delegations[msg.sender];
         (uint128 acc, ) = twn.estimateAccumulated(msg.sender);
-        (uint64 delegateAmount, , , ) = twn.getStakeState(msg.sender);
+        (uint64 delegateAmount, , uint64 lockedUntil, ) = twn.getStakeState(msg.sender);
         require(delegateAmount > 0, 'Must have a stake to delegate');
+        require(lockedUntil == 0, 'Cannot change delegation while withdrawing');
         userDelegation.processed = acc;
         userDelegation.processedDate = uint128(block.timestamp);
         changeDelegation(delegateAmount, to);
     }
 
     function undelegate() public {
+        (, , uint64 lockedUntil, ) = twn.getStakeState(msg.sender);
+        require(lockedUntil == 0, 'Cannot change delegation while withdrawing');
         uint32 currentEpoch = getCurrentEpoch();
         DelegationChange memory currentDelegation = getActiveDelegation(msg.sender, currentEpoch + 1);
         changeDelegation(currentDelegation.balance, address(0));
