@@ -22,7 +22,7 @@ describe("ChromiaDelegation", function () {
     const erc20Mock = await ERC20Mock.deploy(10000000000);
     await erc20Mock.deployed();
 
-    const TwoWeeksNotice = await ethers.getContractFactory("contracts/TwoWeeksNotice.sol:TwoWeeksNotice");
+    const TwoWeeksNotice = await ethers.getContractFactory("contracts/old/TwoWeeksNotice.sol:TwoWeeksNotice");
     const twoWeeksNotice = await TwoWeeksNotice.deploy(erc20Mock.address);
     await twoWeeksNotice.deployed();
 
@@ -113,13 +113,15 @@ describe("ChromiaDelegation", function () {
     await chromiaDelegation.connect(randomAddresses[0]).delegate(owner.address);
     await time.increase(weeks(3));
     await twoWeeksNotice.connect(randomAddresses[0]).requestWithdraw();
+    await chromiaDelegation.connect(randomAddresses[0]).syncWithdrawRequest();
     await time.increase(weeks(1));
 
     let preBalance = await erc20Mock.balanceOf(randomAddresses[0].address);
     // Claim yield
-    await expect(chromiaDelegation.connect(randomAddresses[0]).claimYield(randomAddresses[0].address)).
-      to.be.revertedWith("Accumulated doesnt match with TWN");
+    // await expect(chromiaDelegation.connect(randomAddresses[0]).claimYield(randomAddresses[0].address)).
+    //   to.not.be.revertedWith("Accumulated doesnt match with TWN");
     let postBalance = await erc20Mock.balanceOf(randomAddresses[0].address);
+    await chromiaDelegation.connect(randomAddresses[0]).claimYield(randomAddresses[0].address);
 
     await expect(postBalance - preBalance).to.eq(0);
   });

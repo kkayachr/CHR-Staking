@@ -8,16 +8,41 @@ pragma solidity ^0.8.17;
 
 import '@openzeppelin/contracts/token/ERC20/IERC20.sol';
 import './TwoWeeksNoticeProvider.sol';
-import './ChromiaDelegationSync.sol';
 import 'hardhat/console.sol';
 
-contract ChromiaDelegation is ChromiaDelegationSync, TwoWeeksNoticeProvider {
+interface TwoWeeksNotice {
+    function estimateAccumulated(address account) external view returns (uint128, uint128);
+
+    function getStakeState(address account) external view returns (uint64, uint64, uint64, uint64);
+
+    function requestWithdraw() external;
+
+    function withdraw(address to) external;
+}
+
+contract ChromiaDelegation is TwoWeeksNoticeProvider {
     struct RewardPerDayPerTokenChange {
         uint128 timePoint;
         uint128 rewardPerDayPerToken;
     }
 
+    struct DelegationChange {
+        uint128 timePoint;
+        uint128 balance;
+        address delegatedTo;
+    }
+
+    struct DelegationState {
+        uint128 processed;
+        uint128 processedDate;
+        uint128 balanceAtProcessed;
+        mapping(uint32 => DelegationChange) delegationTimeline; // each uint key is a week starting from "startTime"
+    }
+
+    mapping(address => DelegationState) public delegations;
     mapping(uint32 => RewardPerDayPerTokenChange) public rewardPerDayPerTokenTimeline;
+
+    TwoWeeksNotice public twn;
 
     constructor(
         IERC20 _token,
@@ -25,8 +50,18 @@ contract ChromiaDelegation is ChromiaDelegationSync, TwoWeeksNoticeProvider {
         address _owner,
         uint64 inital_reward,
         uint64 inital_reward_provider
-    ) ChromiaDelegationSync(_twn) TwoWeeksNoticeProvider(_token, _owner, inital_reward_provider) {
+    ) TwoWeeksNoticeProvider(_token, _owner, inital_reward_provider) {
         rewardPerDayPerTokenTimeline[0] = RewardPerDayPerTokenChange(uint128(block.timestamp), inital_reward);
+        twn = _twn;
+    }
+
+    function verifyStake(address account) internal view {
+        (, uint128 remoteAccumulated) = twn.estimateAccumulated(account);
+
+        uint128 deltaTime = uint128(block.timestamp) - delegations[account].processedDate;
+        uint128 localAccumulated = (delegations[account].balanceAtProcessed * deltaTime) / 86400;
+
+        require(remoteAccumulated >= (localAccumulated + delegations[account].processed), 'Accumulated doesnt match with TWN');
     }
 
     function setRewardRate(uint64 rewardRate) external {
@@ -49,23 +84,12 @@ contract ChromiaDelegation is ChromiaDelegationSync, TwoWeeksNoticeProvider {
         }
     }
 
-    function changeDelegation(uint128 balance, address delegatedTo) private {
-        uint32 currentEpoch = getCurrentEpoch();
-        DelegationState storage userState = delegations[msg.sender];
-        userState.delegationTimeline[currentEpoch + 1] = DelegationChange(
-            uint128(getEpochTime(currentEpoch + 1)),
-            balance,
-            delegatedTo
-        );
-        userState.stakeTimeline.push(StakeChange(uint128(block.timestamp), balance));
-    }
-
     function estimateYield(address account) public view returns (uint128 reward, uint128 providerReward) {
         DelegationState storage userState = delegations[account];
         uint32 processedEpoch = getEpoch(userState.processedDate) - 1;
         uint32 currentEpoch = getCurrentEpoch();
         if (currentEpoch - 1 > processedEpoch) {
-            verifyRemoteAccumulated(account); // verify that TWN and ChromiaDelegation are synced
+            verifyStake(account); // verify that TWN and ChromiaDelegation are synced
 
             uint128 totalReward;
             RewardPerDayPerTokenChange memory activeRate = getActiveRate(processedEpoch + 1);
@@ -96,9 +120,21 @@ contract ChromiaDelegation is ChromiaDelegationSync, TwoWeeksNoticeProvider {
         }
     }
 
+    function syncWithdrawRequest() external {
+        (, , uint64 lockedUntil, ) = twn.getStakeState(msg.sender);
+        require(lockedUntil > 0, 'Withdraw has not been requested');
+        DelegationState storage userState = delegations[msg.sender];
+        (, uint128 acc) = twn.estimateAccumulated(msg.sender);
+
+        uint32 lockedUntilEpoch = getEpoch(lockedUntil);
+        userState.balanceAtProcessed = 0;
+        userState.processed = acc;
+        userState.processedDate = uint128(block.timestamp);
+        userState.delegationTimeline[lockedUntilEpoch] = DelegationChange(uint128(getEpochTime(lockedUntilEpoch)), 0, address(0));
+    }
+
     function claimYield(address account) public {
-        require(delegations[account].stakeTimeline.length > 0, 'Address must make a first delegation.');
-        require(delegations[account].processedDate > 0, 'Address must be processed.');
+        require(delegations[account].processedDate > 0, 'Address must make a first delegation.');
         (uint128 reward, uint128 providerReward) = estimateYield(account);
         if (reward > 0) {
             (uint128 acc, ) = twn.estimateAccumulated(account);
@@ -110,27 +146,22 @@ contract ChromiaDelegation is ChromiaDelegationSync, TwoWeeksNoticeProvider {
         }
     }
 
-    function requestWithdraw() external {
-        twn.requestWithdraw();
-        DelegationState storage userState = delegations[msg.sender];
-        userState.stakeTimeline.push(StakeChange(uint128(block.timestamp), 0));
-        uint32 currentEpoch = getCurrentEpoch();
-        userState.delegationTimeline[currentEpoch + 2] = DelegationChange(uint128(getEpochTime(currentEpoch + 2)), 0, address(0));
-    }
-
-    function withdraw(address to) external {
-        twn.withdraw(to);
-    }
-
     function delegate(address to) public {
-        DelegationState storage userDelegation = delegations[msg.sender];
+        DelegationState storage userState = delegations[msg.sender];
         (uint128 acc, ) = twn.estimateAccumulated(msg.sender);
         (uint64 delegateAmount, , uint64 lockedUntil, ) = twn.getStakeState(msg.sender);
         require(delegateAmount > 0, 'Must have a stake to delegate');
         require(lockedUntil == 0, 'Cannot change delegation while withdrawing');
-        userDelegation.processed = acc;
-        userDelegation.processedDate = uint128(block.timestamp);
-        changeDelegation(delegateAmount, to);
+        uint32 currentEpoch = getCurrentEpoch();
+
+        userState.processed = acc;
+        userState.processedDate = uint128(block.timestamp);
+        userState.balanceAtProcessed = delegateAmount;
+        userState.delegationTimeline[currentEpoch + 1] = DelegationChange(
+            uint128(getEpochTime(currentEpoch + 1)),
+            delegateAmount,
+            to
+        );
     }
 
     function undelegate() public {
@@ -138,7 +169,12 @@ contract ChromiaDelegation is ChromiaDelegationSync, TwoWeeksNoticeProvider {
         require(lockedUntil == 0, 'Cannot change delegation while withdrawing');
         uint32 currentEpoch = getCurrentEpoch();
         DelegationChange memory currentDelegation = getActiveDelegation(msg.sender, currentEpoch + 1);
-        changeDelegation(currentDelegation.balance, address(0));
+        DelegationState storage userState = delegations[msg.sender];
+        userState.delegationTimeline[currentEpoch + 1] = DelegationChange(
+            uint128(getEpochTime(currentEpoch + 1)),
+            currentDelegation.balance,
+            address(0)
+        );
     }
 
     function drain() external {
