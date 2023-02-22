@@ -14,10 +14,6 @@ interface TwoWeeksNotice {
     function estimateAccumulated(address account) external view returns (uint128, uint128);
 
     function getStakeState(address account) external view returns (uint64, uint64, uint64, uint64);
-
-    function requestWithdraw() external;
-
-    function withdraw(address to) external;
 }
 
 contract ChromiaDelegation is TwoWeeksNoticeProvider {
