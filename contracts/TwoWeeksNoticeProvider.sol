@@ -8,7 +8,11 @@ pragma solidity ^0.8.17;
 
 import '@openzeppelin/contracts/token/ERC20/IERC20.sol';
 import 'hardhat/console.sol';
-import './ChromiaDelegationSync.sol';
+
+struct StakeChange {
+    uint128 timePoint;
+    uint128 balance;
+}
 
 contract TwoWeeksNoticeProvider {
     struct StakeState {
