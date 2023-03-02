@@ -10,22 +10,29 @@ import '@openzeppelin/contracts/token/ERC20/IERC20.sol';
 import 'hardhat/console.sol';
 
 struct StakeChange {
+    // TODO: change name
     uint128 timePoint;
     uint128 balance;
+    uint128 extraReward;
+    uint128 totalDelegations;
+    uint128 delegationsIncrease;
+    uint128 delegationsDecrease;
+    bool totalDelegationsSet;
 }
 
 contract TwoWeeksNoticeProvider {
     struct StakeState {
         uint64 balance;
-        uint64 delegationRewards;
+        uint64 delegationRewards; // TODO: REMOVE THIS
         uint128 processed;
-        uint128 rewardFraction; // E.g. If this number is 10, the provider will get 1/10 of the user reward
+        uint32 claimedEpochReward;
+        uint128 rewardFraction; // E.g. If this number is 10, the provider will get 1/10 of the user reward TODO: ALSO REMOVE THIS
         uint64 unlockPeriod; // time it takes from requesting withdraw to being able to withdraw
         uint64 lockedUntil; // 0 if withdraw is not requested
         uint64 since;
         uint128 accumulated; // token-days staked
         uint128 accumulatedStrict; // token-days staked sans withdraw periods
-        mapping(uint32 => StakeChange) stakeTimeline;
+        mapping(uint32 => StakeChange) stakeTimeline; // TODO: change name
     }
 
     event StakeUpdate(address indexed from, uint64 balance);
@@ -116,7 +123,9 @@ contract TwoWeeksNoticeProvider {
         ss.unlockPeriod = unlockPeriod;
         ss.lockedUntil = 0;
         ss.since = uint64(block.timestamp);
-        ss.stakeTimeline[getCurrentEpoch() + 1] = StakeChange(uint128(block.timestamp), amount);
+        StakeChange memory nextStakeChange = ss.stakeTimeline[getCurrentEpoch() + 1];
+        nextStakeChange.timePoint = uint128(block.timestamp);
+        nextStakeChange.balance = amount;
         ss.rewardFraction = 10;
         emit StakeUpdate(msg.sender, amount);
     }
@@ -140,7 +149,9 @@ contract TwoWeeksNoticeProvider {
         ss.unlockPeriod = 0;
         ss.lockedUntil = 0;
         ss.since = 0;
-        ss.stakeTimeline[getCurrentEpoch() + 1] = StakeChange(uint128(block.timestamp), 0);
+        StakeChange memory nextStakeChange = ss.stakeTimeline[getCurrentEpoch() + 1];
+        nextStakeChange.timePoint = uint128(block.timestamp);
+        nextStakeChange.balance = 0;
         require(token.transfer(to, balance), 'transfer unsuccessful');
         emit StakeUpdate(msg.sender, 0);
     }
@@ -157,6 +168,25 @@ contract TwoWeeksNoticeProvider {
         require(reward > 0, 'reward is 0');
         _states[msg.sender].delegationRewards = 0;
         token.transfer(msg.sender, reward);
+    }
+
+    function calculateTotalDelegation(uint32 epoch, address account) public view returns (uint128 latestTotalDelegations) {
+        StakeChange memory stakeChange;
+        uint32 latestTotalDelegationsEpoch;
+        for (uint32 i = epoch; i >= 0; i--) {
+            stakeChange = _states[account].stakeTimeline[i];
+            if (stakeChange.totalDelegationsSet) {
+                latestTotalDelegations = stakeChange.totalDelegations;
+                latestTotalDelegationsEpoch = i;
+                break;
+            }
+            if (i == 0) break;
+        }
+        for (uint32 i = latestTotalDelegationsEpoch; i <= epoch; i++) {
+            stakeChange = _states[account].stakeTimeline[i];
+            latestTotalDelegations = latestTotalDelegations + stakeChange.delegationsIncrease - stakeChange.delegationsDecrease;
+        }
+        return latestTotalDelegations;
     }
 
     function estimateProviderYield(address account) public view returns (uint128 reward) {
@@ -176,13 +206,37 @@ contract TwoWeeksNoticeProvider {
         token.transfer(msg.sender, reward);
     }
 
+    function estimateProviderReward() public returns (uint128 reward) {
+        StakeState storage providerState = _states[msg.sender];
+        uint32 processedEpoch = providerState.claimedEpochReward;
+        uint32 currentEpoch = getCurrentEpoch();
+
+        if (currentEpoch - 1 > processedEpoch) {
+            for (uint32 i = processedEpoch + 1; i < currentEpoch; i++) {
+                uint128 totalDelegations = calculateTotalDelegation(i, msg.sender);
+                providerState.stakeTimeline[i].totalDelegations = totalDelegations;
+                reward += uint128(1 * totalDelegations * epochLength);
+            }
+
+            if (reward == 0) return 0;
+            reward /= 1000000 * 86400;
+        }
+    }
+
+    function claimProviderReward() public {
+        uint128 reward = estimateProviderReward();
+        require(reward > 0, 'reward is 0');
+        _states[msg.sender].claimedEpochReward = getCurrentEpoch() - 1;
+        token.transfer(msg.sender, reward);
+    }
+
     function claimAllProviderRewards() public {
-        uint128 reward = _states[msg.sender].delegationRewards;
+        uint128 reward = estimateProviderReward();
         reward += estimateProviderYield(msg.sender);
         require(reward > 0, 'reward is 0');
         (uint128 acc, ) = estimateAccumulated(msg.sender);
         _states[msg.sender].processed = acc;
-        _states[msg.sender].delegationRewards = 0;
+        _states[msg.sender].claimedEpochReward = getCurrentEpoch() - 1;
         token.transfer(msg.sender, reward);
     }
 

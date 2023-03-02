@@ -150,7 +150,14 @@ contract ChromiaDelegation is TwoWeeksNoticeProvider {
         require(lockedUntil == 0, 'Cannot change delegation while withdrawing');
         uint32 currentEpoch = getCurrentEpoch();
 
+        // Remove previous delegation from providers pool
+        DelegationChange memory currentDelegation = getActiveDelegation(msg.sender, currentEpoch + 1);
+        StakeState storage prevProviderState = _states[currentDelegation.delegatedTo];
+        prevProviderState.stakeTimeline[currentEpoch + 1].delegationsDecrease += currentDelegation.balance;
+
         if (userState.claimedEpoch == 0) userState.claimedEpoch = currentEpoch;
+        // BUG HERE, if claimedEpoch stays the same and processed becomes acc, users can cheat and earn rewards without staking
+        // in TWN.
         userState.processed = acc;
         userState.processedDate = uint128(block.timestamp);
         userState.balanceAtProcessed = delegateAmount;
@@ -159,6 +166,10 @@ contract ChromiaDelegation is TwoWeeksNoticeProvider {
             delegateAmount,
             to
         );
+
+        // Add delegation to new providers pool
+        StakeState storage providerState = _states[to];
+        providerState.stakeTimeline[currentEpoch + 1].delegationsIncrease += delegateAmount;
     }
 
     function undelegate() public {
