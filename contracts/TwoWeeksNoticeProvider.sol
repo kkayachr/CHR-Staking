@@ -146,7 +146,8 @@ contract TwoWeeksNoticeProvider {
         ss.unlockPeriod = 0;
         ss.lockedUntil = 0;
         ss.since = 0;
-        StakeChange memory nextStakeChange = ss.stakeTimeline[getCurrentEpoch() + 1];
+
+        StakeChange storage nextStakeChange = ss.stakeTimeline[getCurrentEpoch() + 1];
         nextStakeChange.balanceChanged = true;
         nextStakeChange.balance = 0;
         require(token.transfer(to, balance), 'transfer unsuccessful');
@@ -165,7 +166,7 @@ contract TwoWeeksNoticeProvider {
             }
             if (i == 0) break;
         }
-        for (uint32 i = latestTotalDelegationsEpoch; i <= epoch; i++) {
+        for (uint32 i = latestTotalDelegationsEpoch + 1; i <= epoch; i++) {
             stakeChange = _states[account].stakeTimeline[i];
             latestTotalDelegations = latestTotalDelegations + stakeChange.delegationsIncrease - stakeChange.delegationsDecrease;
         }
@@ -189,16 +190,17 @@ contract TwoWeeksNoticeProvider {
         token.transfer(msg.sender, reward);
     }
 
-    function estimateProviderReward() public returns (uint128 reward) {
+    function estimateProviderDelegationReward() public returns (uint128 reward) {
         StakeState storage providerState = _states[msg.sender];
-        uint32 processedEpoch = providerState.claimedEpochReward;
+        uint32 claimedEpochReward = providerState.claimedEpochReward;
         uint32 currentEpoch = getCurrentEpoch();
 
-        if (currentEpoch - 1 > processedEpoch) {
-            for (uint32 i = processedEpoch + 1; i < currentEpoch; i++) {
+        if (currentEpoch - 1 > claimedEpochReward) {
+            for (uint32 i = claimedEpochReward + 1; i < currentEpoch; i++) {
                 uint128 totalDelegations = calculateTotalDelegation(i, msg.sender);
                 providerState.stakeTimeline[i].totalDelegations = totalDelegations;
-                reward += uint128(1 * totalDelegations * epochLength);
+                providerState.stakeTimeline[i].totalDelegationsSet = true;
+                reward += uint128(1 * totalDelegations * epochLength); // TODO: Set a correct percentage - what will provider earn on total that is delegated to them
             }
 
             if (reward == 0) return 0;
@@ -206,15 +208,15 @@ contract TwoWeeksNoticeProvider {
         }
     }
 
-    function claimProviderReward() public {
-        uint128 reward = estimateProviderReward();
+    function claimProviderDelegationReward() public {
+        uint128 reward = estimateProviderDelegationReward();
         require(reward > 0, 'reward is 0');
         _states[msg.sender].claimedEpochReward = getCurrentEpoch() - 1;
         token.transfer(msg.sender, reward);
     }
 
     function claimAllProviderRewards() public {
-        uint128 reward = estimateProviderReward();
+        uint128 reward = estimateProviderDelegationReward();
         reward += estimateProviderYield(msg.sender);
         require(reward > 0, 'reward is 0');
         (uint128 acc, ) = estimateAccumulated(msg.sender);
