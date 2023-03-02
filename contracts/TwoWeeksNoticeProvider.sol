@@ -9,29 +9,27 @@ pragma solidity ^0.8.17;
 import '@openzeppelin/contracts/token/ERC20/IERC20.sol';
 import 'hardhat/console.sol';
 
+// TODO: change name
 struct StakeChange {
-    // TODO: change name
-    uint128 timePoint;
     uint128 balance;
     uint128 extraReward;
     uint128 totalDelegations;
     uint128 delegationsIncrease;
     uint128 delegationsDecrease;
     bool totalDelegationsSet;
+    bool balanceChanged;
 }
 
 contract TwoWeeksNoticeProvider {
     struct StakeState {
-        uint64 balance;
-        uint64 delegationRewards; // TODO: REMOVE THIS
-        uint128 processed;
-        uint32 claimedEpochReward;
-        uint128 rewardFraction; // E.g. If this number is 10, the provider will get 1/10 of the user reward TODO: ALSO REMOVE THIS
         uint64 unlockPeriod; // time it takes from requesting withdraw to being able to withdraw
         uint64 lockedUntil; // 0 if withdraw is not requested
         uint64 since;
+        uint64 balance;
         uint128 accumulated; // token-days staked
         uint128 accumulatedStrict; // token-days staked sans withdraw periods
+        uint128 processed;
+        uint32 claimedEpochReward;
         mapping(uint32 => StakeChange) stakeTimeline; // TODO: change name
     }
 
@@ -58,9 +56,9 @@ contract TwoWeeksNoticeProvider {
         rewardPerDayPerTokenProvider = rewardRate;
     }
 
-    function getStakeState(address account) external view returns (uint64, uint64, uint64, uint64, uint64, uint128) {
+    function getStakeState(address account) external view returns (uint64, uint64, uint64, uint64, uint128) {
         StakeState storage ss = _states[account];
-        return (ss.balance, ss.delegationRewards, ss.unlockPeriod, ss.lockedUntil, ss.since, ss.processed);
+        return (ss.balance, ss.unlockPeriod, ss.lockedUntil, ss.since, ss.processed);
     }
 
     function getAccumulated(address account) external view returns (uint128, uint128) {
@@ -124,9 +122,8 @@ contract TwoWeeksNoticeProvider {
         ss.lockedUntil = 0;
         ss.since = uint64(block.timestamp);
         StakeChange memory nextStakeChange = ss.stakeTimeline[getCurrentEpoch() + 1];
-        nextStakeChange.timePoint = uint128(block.timestamp);
+        nextStakeChange.balanceChanged = true;
         nextStakeChange.balance = amount;
-        ss.rewardFraction = 10;
         emit StakeUpdate(msg.sender, amount);
     }
 
@@ -150,24 +147,10 @@ contract TwoWeeksNoticeProvider {
         ss.lockedUntil = 0;
         ss.since = 0;
         StakeChange memory nextStakeChange = ss.stakeTimeline[getCurrentEpoch() + 1];
-        nextStakeChange.timePoint = uint128(block.timestamp);
+        nextStakeChange.balanceChanged = true;
         nextStakeChange.balance = 0;
         require(token.transfer(to, balance), 'transfer unsuccessful');
         emit StakeUpdate(msg.sender, 0);
-    }
-
-    function addDelegationReward(uint64 amount, address provider) internal {
-        StakeState storage ss = _states[provider];
-        require(amount > 0, 'amount must be positive');
-
-        ss.delegationRewards += amount;
-    }
-
-    function claimDelegationReward() public {
-        uint128 reward = _states[msg.sender].delegationRewards;
-        require(reward > 0, 'reward is 0');
-        _states[msg.sender].delegationRewards = 0;
-        token.transfer(msg.sender, reward);
     }
 
     function calculateTotalDelegation(uint32 epoch, address account) public view returns (uint128 latestTotalDelegations) {

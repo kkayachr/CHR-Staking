@@ -18,14 +18,14 @@ interface TwoWeeksNotice {
 
 contract ChromiaDelegation is TwoWeeksNoticeProvider {
     struct RewardPerDayPerTokenChange {
-        uint128 timePoint;
         uint128 rewardPerDayPerToken;
+        bool changed;
     }
 
     struct DelegationChange {
-        uint128 timePoint;
         uint128 balance;
         address delegatedTo;
+        bool changed;
     }
 
     struct DelegationState {
@@ -48,7 +48,7 @@ contract ChromiaDelegation is TwoWeeksNoticeProvider {
         uint64 inital_reward,
         uint64 inital_reward_provider
     ) TwoWeeksNoticeProvider(_token, _owner, inital_reward_provider) {
-        rewardPerDayPerTokenTimeline[0] = RewardPerDayPerTokenChange(uint128(block.timestamp), inital_reward);
+        rewardPerDayPerTokenTimeline[0] = RewardPerDayPerTokenChange(inital_reward, true);
         twn = _twn;
     }
 
@@ -63,58 +63,54 @@ contract ChromiaDelegation is TwoWeeksNoticeProvider {
 
     function setRewardRate(uint64 rewardRate) external {
         require(msg.sender == owner);
-        uint32 currentEpoch = getCurrentEpoch();
-        rewardPerDayPerTokenTimeline[currentEpoch + 1] = RewardPerDayPerTokenChange(getEpochTime(currentEpoch + 1), rewardRate);
+        rewardPerDayPerTokenTimeline[getCurrentEpoch() + 1] = RewardPerDayPerTokenChange(rewardRate, true);
     }
 
     function getActiveDelegation(address account, uint32 epoch) public view returns (DelegationChange memory activeDelegation) {
         for (uint32 i = epoch; i >= 0; i--) {
-            if (delegations[account].delegationTimeline[i].timePoint > 0) return delegations[account].delegationTimeline[i];
+            if (delegations[account].delegationTimeline[i].changed) return delegations[account].delegationTimeline[i];
             if (i == 0) break;
         }
     }
 
-    function getActiveRate(uint32 epoch) public view returns (RewardPerDayPerTokenChange memory activeRate) {
+    function getActiveRate(uint32 epoch) public view returns (uint128 activeRate) {
         for (uint32 i = epoch; i >= 0; i--) {
-            if (rewardPerDayPerTokenTimeline[i].timePoint > 0) return rewardPerDayPerTokenTimeline[i];
+            if (rewardPerDayPerTokenTimeline[i].changed) return rewardPerDayPerTokenTimeline[i].rewardPerDayPerToken;
             if (i == 0) break;
         }
     }
 
-    function estimateYield(address account) public view returns (uint128 reward, uint128 providerReward) {
+    function estimateYield(address account) public view returns (uint128 reward) {
         DelegationState storage userState = delegations[account];
         uint32 processedEpoch = userState.claimedEpoch;
         uint32 currentEpoch = getCurrentEpoch();
         if (currentEpoch - 1 > processedEpoch) {
             verifyStake(account); // verify that TWN > ChromiaDelegation
 
-            uint128 totalReward;
-            RewardPerDayPerTokenChange memory activeRate = getActiveRate(processedEpoch + 1);
+            uint128 activeRate = getActiveRate(processedEpoch + 1);
             DelegationChange memory activeDelegation = getActiveDelegation(account, processedEpoch + 1);
             StakeState storage providerState = _states[activeDelegation.delegatedTo];
+            // TODO: get active provider stake from its timeline - is provider even staked?
 
             for (uint32 i = processedEpoch + 1; i < currentEpoch; i++) {
-                activeRate = rewardPerDayPerTokenTimeline[i].timePoint > 0 ? rewardPerDayPerTokenTimeline[i] : activeRate;
-                activeDelegation = userState.delegationTimeline[i].timePoint > 0
-                    ? userState.delegationTimeline[i]
-                    : activeDelegation;
+                activeRate = rewardPerDayPerTokenTimeline[i].changed
+                    ? rewardPerDayPerTokenTimeline[i].rewardPerDayPerToken
+                    : activeRate;
+                activeDelegation = userState.delegationTimeline[i].changed ? userState.delegationTimeline[i] : activeDelegation;
 
-                if (providerState.stakeTimeline[i].timePoint > 0 && providerState.stakeTimeline[i].balance == 0) {
+                if (providerState.stakeTimeline[i].balanceChanged && providerState.stakeTimeline[i].balance == 0) {
+                    // if provider withdrew, stop counting reward
                     break;
                 } else if (activeDelegation.delegatedTo == address(0)) {
+                    // If user is undelegated this epoch, skip it
                     continue;
                 } else {
-                    if (providerState.stakeTimeline[i].timePoint == 0) {
-                        providerState = _states[activeDelegation.delegatedTo];
-                    }
-                    totalReward += uint128(activeRate.rewardPerDayPerToken * activeDelegation.balance * epochLength);
+                    reward += uint128(activeRate * activeDelegation.balance * epochLength);
                 }
             }
 
-            if (totalReward == 0) return (0, 0);
-            totalReward /= 1000000 * 86400;
-            providerReward = totalReward / providerState.rewardFraction;
-            reward = totalReward - providerReward;
+            if (reward == 0) return 0;
+            reward /= 1000000 * 86400;
         }
     }
 
@@ -128,26 +124,25 @@ contract ChromiaDelegation is TwoWeeksNoticeProvider {
         userState.balanceAtProcessed = 0;
         userState.processed = acc;
         userState.processedDate = uint128(block.timestamp);
-        userState.delegationTimeline[lockedUntilEpoch] = DelegationChange(uint128(getEpochTime(lockedUntilEpoch)), 0, address(0));
+        userState.delegationTimeline[lockedUntilEpoch] = DelegationChange(0, address(0), true);
     }
 
     function claimYield(address account) public {
         require(delegations[account].processedDate > 0, 'Address must make a first delegation.');
-        (uint128 reward, uint128 providerReward) = estimateYield(account);
+        uint128 reward = estimateYield(account);
         if (reward > 0) {
             delegations[account].claimedEpoch = getCurrentEpoch() - 1;
-
             token.transfer(account, reward);
-            addDelegationReward(uint64(providerReward), getActiveDelegation(account, getCurrentEpoch()).delegatedTo);
         }
     }
 
     function delegate(address to) public {
         DelegationState storage userState = delegations[msg.sender];
-        (uint128 acc, ) = twn.estimateAccumulated(msg.sender);
+        (, uint128 acc) = twn.estimateAccumulated(msg.sender);
         (uint64 delegateAmount, , uint64 lockedUntil, ) = twn.getStakeState(msg.sender);
         require(delegateAmount > 0, 'Must have a stake to delegate');
         require(lockedUntil == 0, 'Cannot change delegation while withdrawing');
+
         uint32 currentEpoch = getCurrentEpoch();
 
         // Remove previous delegation from providers pool
@@ -161,11 +156,7 @@ contract ChromiaDelegation is TwoWeeksNoticeProvider {
         userState.processed = acc;
         userState.processedDate = uint128(block.timestamp);
         userState.balanceAtProcessed = delegateAmount;
-        userState.delegationTimeline[currentEpoch + 1] = DelegationChange(
-            uint128(getEpochTime(currentEpoch + 1)),
-            delegateAmount,
-            to
-        );
+        userState.delegationTimeline[currentEpoch + 1] = DelegationChange(delegateAmount, to, true);
 
         // Add delegation to new providers pool
         StakeState storage providerState = _states[to];
@@ -178,11 +169,7 @@ contract ChromiaDelegation is TwoWeeksNoticeProvider {
         uint32 currentEpoch = getCurrentEpoch();
         DelegationChange memory currentDelegation = getActiveDelegation(msg.sender, currentEpoch + 1);
         DelegationState storage userState = delegations[msg.sender];
-        userState.delegationTimeline[currentEpoch + 1] = DelegationChange(
-            uint128(getEpochTime(currentEpoch + 1)),
-            currentDelegation.balance,
-            address(0)
-        );
+        userState.delegationTimeline[currentEpoch + 1] = DelegationChange(currentDelegation.balance, address(0), true);
     }
 
     function drain() external {

@@ -11,7 +11,7 @@ require("dotenv").config();
 
 
 function calcExpectedReward(stake, weeks) {
-  return ((stake * 7 * weeks) / 1000000) * 0.9;
+  return ((stake * 7 * weeks) / 1000000);
 }
 
 describe("ChromiaDelegation", function () {
@@ -160,7 +160,7 @@ describe("ChromiaDelegation", function () {
     // Provider received yield
     await expect(postBalance - preBalance).to.eq(estimatedYield);
 
-    let processed = (await chromiaDelegation.getStakeState(owner.address))[5];
+    let processed = (await chromiaDelegation.getStakeState(owner.address))[4];
     await expect(processed).to.be.closeTo(expectedProcessed, Math.round(expectedProcessed.toNumber() * 0.0000001));
   });
 
@@ -189,7 +189,7 @@ describe("ChromiaDelegation", function () {
 
     await chromiaDelegation.withdrawProvider(owner.address);
     await erc20Mock.increaseAllowance(chromiaDelegation.address, 10000000000);
-    let [expectedYield,] = await chromiaDelegation.estimateYield(randomAddresses[0].address);
+    let expectedYield = await chromiaDelegation.estimateYield(randomAddresses[0].address);
     await time.increase(weeks(5));
 
     await chromiaDelegation.stake(10000000000, days(14));
@@ -213,20 +213,20 @@ describe("ChromiaDelegation", function () {
     await chromiaDelegation.connect(randomAddresses[0]).delegate(owner.address);
     await time.increase(days(365));
 
-    let [expectedYield,] = await chromiaDelegation.estimateYield(randomAddresses[0].address);
+    let expectedYield = await chromiaDelegation.estimateYield(randomAddresses[0].address);
     // User claim yield
     await chromiaDelegation.connect(randomAddresses[0]).claimYield(randomAddresses[0].address);
 
-    let providerReward = (await chromiaDelegation.getStakeState(owner.address))[1];
+    // let providerReward = ;
     // ProviderReward has been set
-    await expect(providerReward).to.eq(expectedYield / 9);
+    // await expect(providerReward).to.eq(expectedYield / 9);
 
     let providerYield = await chromiaDelegation.estimateProviderYield(owner.address);
 
     preBalance = await erc20Mock.balanceOf(owner.address);
     let expectedProcessed = (await chromiaDelegation.estimateAccumulated(owner.address))[0];
     // Claim provider delegation reward
-    await chromiaDelegation.claimDelegationReward();
+    await chromiaDelegation.claimProviderReward();
     postBalance = await erc20Mock.balanceOf(owner.address);
 
     // Provider has received fee
