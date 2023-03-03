@@ -22,13 +22,13 @@ struct StakeChange {
 
 contract TwoWeeksNoticeProvider {
     struct StakeState {
+        uint128 accumulated; // token-days staked
+        uint128 accumulatedStrict; // token-days staked sans withdraw periods
+        uint128 processed;
         uint64 unlockPeriod; // time it takes from requesting withdraw to being able to withdraw
         uint64 lockedUntil; // 0 if withdraw is not requested
         uint64 since;
         uint64 balance;
-        uint128 accumulated; // token-days staked
-        uint128 accumulatedStrict; // token-days staked sans withdraw periods
-        uint128 processed;
         uint32 claimedEpochReward;
         mapping(uint32 => StakeChange) stakeTimeline; // TODO: change name
     }

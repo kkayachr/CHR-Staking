@@ -94,9 +94,12 @@ contract ChromiaDelegation is TwoWeeksNoticeProvider {
             // TODO: get active provider stake from its timeline - is provider even staked?
 
             for (uint32 i = processedEpoch + 1; i < currentEpoch; i++) {
+                // Check if rate changes this epoch
                 activeRate = rewardPerDayPerTokenTimeline[i].changed
                     ? rewardPerDayPerTokenTimeline[i].rewardPerDayPerToken
                     : activeRate;
+
+                // Check if users delegation changes this epoch
                 activeDelegation = userState.delegationTimeline[i].changed ? userState.delegationTimeline[i] : activeDelegation;
 
                 if (providerState.stakeTimeline[i].balanceChanged && providerState.stakeTimeline[i].balance == 0) {
@@ -106,6 +109,7 @@ contract ChromiaDelegation is TwoWeeksNoticeProvider {
                     // If user is undelegated this epoch, skip it
                     continue;
                 } else {
+                    // TODO: Do we want time-based reward or epoch based reward?
                     reward += uint128(activeRate * activeDelegation.balance * epochLength);
                 }
             }
