@@ -9,7 +9,7 @@ pragma solidity ^0.8.17;
 import '@openzeppelin/contracts/token/ERC20/IERC20.sol';
 import 'hardhat/console.sol';
 
-// TODO: change name
+// TODO: change name of this struct
 struct StakeChange {
     uint128 balance;
     uint128 extraReward;
@@ -195,11 +195,15 @@ contract TwoWeeksNoticeProvider {
         uint32 claimedEpochReward = providerState.claimedEpochReward;
         uint32 currentEpoch = getCurrentEpoch();
 
+        uint128 totalDelegations;
+        uint128 prevTotalDelegations;
         if (currentEpoch - 1 > claimedEpochReward) {
             for (uint32 i = claimedEpochReward + 1; i < currentEpoch; i++) {
-                uint128 totalDelegations = calculateTotalDelegation(i, msg.sender);
-                providerState.stakeTimeline[i].totalDelegations = totalDelegations;
-                providerState.stakeTimeline[i].totalDelegationsSet = true;
+                totalDelegations = calculateTotalDelegation(i, msg.sender);
+                if (totalDelegations != prevTotalDelegations) {
+                    providerState.stakeTimeline[i].totalDelegations = totalDelegations;
+                    providerState.stakeTimeline[i].totalDelegationsSet = true;
+                }
                 reward += uint128(1 * totalDelegations * epochLength); // TODO: Set a correct percentage - what will provider earn on total that is delegated to them
             }
 

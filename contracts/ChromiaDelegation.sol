@@ -84,6 +84,7 @@ contract ChromiaDelegation is TwoWeeksNoticeProvider {
         DelegationState storage userState = delegations[account];
         uint32 processedEpoch = userState.claimedEpoch;
         uint32 currentEpoch = getCurrentEpoch();
+
         if (currentEpoch - 1 > processedEpoch) {
             verifyStake(account); // verify that TWN > ChromiaDelegation
 

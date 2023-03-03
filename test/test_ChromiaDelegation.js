@@ -205,103 +205,78 @@ describe("ChromiaDelegation", function () {
     await expect(postBalance - preBalance).to.eq(expectedReward);
   });
 
-  xit("Should let provider claim delegator rewards", async () => {
+  it("Should let provider claim delegator rewards", async () => {
     const { chromiaDelegation, twoWeeksNotice, erc20Mock, owner, randomAddresses } =
       await loadFixture(deployChromiaDelegation);
 
     // User delegates stake
     await chromiaDelegation.connect(randomAddresses[0]).delegate(owner.address);
-    await time.increase(days(365));
+    await time.increase(weeks(5));
 
-    let expectedYield = await chromiaDelegation.estimateYield(randomAddresses[0].address);
-    // User claim yield
-    await chromiaDelegation.connect(randomAddresses[0]).claimYield(randomAddresses[0].address);
-
-    // let providerReward = ;
-    // ProviderReward has been set
-    // await expect(providerReward).to.eq(expectedYield / 9);
-
-    let providerYield = await chromiaDelegation.estimateProviderYield(owner.address);
+    let totalDelegation = await chromiaDelegation.calculateTotalDelegation(await chromiaDelegation.getCurrentEpoch(), owner.address);
+    var expectedReward = await calcExpectedReward(totalDelegation, 4);
 
     preBalance = await erc20Mock.balanceOf(owner.address);
-    let expectedProcessed = (await chromiaDelegation.estimateAccumulated(owner.address))[0];
     // Claim provider delegation reward
-    await chromiaDelegation.claimProviderReward();
+    await chromiaDelegation.claimProviderDelegationReward();
     postBalance = await erc20Mock.balanceOf(owner.address);
 
-    // Provider has received fee
-    // await expect(postBalance - preBalance).to.eq(providerReward.toNumber());
-  });
+    // // Provider has received fee
+    await expect(postBalance - preBalance).to.eq(expectedReward);
+  }).timeout(10000);
 
   // Provider claiming delegation reward + their own yield
-  xit("Should let provider claim all rewards", async () => {
+  it("Should let provider claim all rewards", async () => {
     const { chromiaDelegation, twoWeeksNotice, erc20Mock, owner, randomAddresses } =
       await loadFixture(deployChromiaDelegation);
 
     // User delegates stake
     await chromiaDelegation.connect(randomAddresses[0]).delegate(owner.address);
-    await time.increase(days(365));
+    await time.increase(weeks(5));
 
-    let expectedYield = await chromiaDelegation.estimateYield(randomAddresses[0].address);
-    // User claim yield
-    await chromiaDelegation.connect(randomAddresses[0]).claimYield(randomAddresses[0].address);
+    let totalDelegation = await chromiaDelegation.calculateTotalDelegation(await chromiaDelegation.getCurrentEpoch(), owner.address);
+    var expectedReward = await calcExpectedReward(totalDelegation, 4);
 
-    let providerReward = (await chromiaDelegation.getStakeState(owner.address))[1];
-    // ProviderReward has been set
-    await expect(providerReward).to.eq(expectedYield / 9);
-
-    let providerYield = await chromiaDelegation.estimateProviderYield(owner.address);
+    let estimatedYield = await chromiaDelegation.estimateProviderYield(owner.address);
 
     preBalance = await erc20Mock.balanceOf(owner.address);
-    let expectedProcessed = (await chromiaDelegation.estimateAccumulated(owner.address))[0];
     // Claim provider delegation reward
     await chromiaDelegation.claimAllProviderRewards();
     postBalance = await erc20Mock.balanceOf(owner.address);
 
-    // Provider has received fee
-    await expect(postBalance - preBalance).to.eq(providerReward.toNumber() + providerYield.toNumber());
-
-    // Provider fee zero'd
-    providerStakeState = await chromiaDelegation.getStakeState(owner.address);
-    await expect(providerStakeState[1]).to.eq(0);
-    await expect(providerStakeState[5]).to.be.closeTo(expectedProcessed, Math.round(expectedProcessed.toNumber() * 0.0000001));
-  });
+    // // Provider has received fee
+    await expect(postBalance - preBalance).to.eq(expectedReward + estimatedYield.toNumber());
+  }).timeout(10000);
 
   // User and provider using the contract demonstrated (make sure to see)
   // the deployChromiaDelegation function as well for full use flow.
-  xit("Normal use flow", async () => {
+  it("Normal use flow", async () => {
     const { chromiaDelegation, twoWeeksNotice, erc20Mock, owner, randomAddresses } =
       await loadFixture(deployChromiaDelegation);
 
     // User delegates stake
     await chromiaDelegation.connect(randomAddresses[0]).delegate(owner.address);
-    await time.increase(days(365));
+    await time.increase(weeks(15));
 
-    let [expectedYield,] = await chromiaDelegation.estimateYield(randomAddresses[0].address);
+    // User claims yield
+    let expectedYield = calcExpectedReward(10000000000, 14);
     let preBalance = await erc20Mock.balanceOf(randomAddresses[0].address);
-    // Claim yield
     await expect(chromiaDelegation.connect(randomAddresses[0]).claimYield(randomAddresses[0].address)).to.not.be.reverted;
     let postBalance = await erc20Mock.balanceOf(randomAddresses[0].address);
 
     // Yield has been received
     await expect(postBalance - preBalance).to.eq(expectedYield);
 
-    let providerReward = await chromiaDelegation.getStakeState(owner.address);
-    // ProviderReward has been set
-    await expect(providerReward[1]).to.eq(expectedYield / 9);
-
+    // Provider claims delegation rewards
+    let expectedProviderYield = calcExpectedReward(10000000000, 14);
     preBalance = await erc20Mock.balanceOf(owner.address);
     // Claim provider delegation reward
-    await chromiaDelegation.claimDelegationReward();
+    await chromiaDelegation.claimProviderDelegationReward();
     postBalance = await erc20Mock.balanceOf(owner.address);
 
     // Provider has received fee
-    await expect(postBalance - preBalance).to.eq(providerReward[1]);
-
-    // Provider fee zero'd
-    providerReward = await chromiaDelegation.getStakeState(owner.address);
-    await expect(providerReward[1]).to.eq(0);
-  });
+    await expect(postBalance - preBalance).to.eq(expectedProviderYield);
+  }).timeout(10000);
 
 
   it("Normal use flow with increase stake and withdraw", async () => {
