@@ -155,19 +155,21 @@ contract TwoWeeksNoticeProvider {
 
     function calculateTotalDelegation(uint32 epoch, address account) public view returns (uint128 latestTotalDelegations) {
         ProviderStateChange memory stakeChange;
-        uint32 latestTotalDelegationsEpoch;
         for (uint32 i = epoch; i >= 0; i--) {
             stakeChange = providerStates[account].providerStateTimeline[i];
             if (stakeChange.totalDelegationsSet) {
                 latestTotalDelegations = stakeChange.totalDelegations;
-                latestTotalDelegationsEpoch = i;
+
+                for (uint32 j = i + 1; i <= epoch; j++) {
+                    stakeChange = providerStates[account].providerStateTimeline[j];
+                    latestTotalDelegations =
+                        latestTotalDelegations +
+                        stakeChange.delegationsIncrease -
+                        stakeChange.delegationsDecrease;
+                }
                 break;
             }
             if (i == 0) break;
-        }
-        for (uint32 i = latestTotalDelegationsEpoch + 1; i <= epoch; i++) {
-            stakeChange = providerStates[account].providerStateTimeline[i];
-            latestTotalDelegations = latestTotalDelegations + stakeChange.delegationsIncrease - stakeChange.delegationsDecrease;
         }
         return latestTotalDelegations;
     }
