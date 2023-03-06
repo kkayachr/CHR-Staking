@@ -17,7 +17,6 @@ struct ProviderStateChange {
     uint128 delegationsDecrease;
     bool totalDelegationsSet;
     bool balanceChanged;
-    bool removedFromWhitelist;
 }
 
 contract TwoWeeksNoticeProvider {
@@ -245,7 +244,7 @@ contract TwoWeeksNoticeProvider {
 
         // withdraw for provider
         if (ss.balance > 0) {
-            updateAccumulated(ss); // TODO: Provider yield gets removed, find workaround
+            updateAccumulated(ss); // TODO: Provider yield gets removed, find workaround?
             uint128 balance = ss.balance;
             ss.balance = 0;
             ss.unlockPeriod = 0;
