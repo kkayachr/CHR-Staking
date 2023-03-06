@@ -102,25 +102,26 @@ contract TwoWeeksNoticeProvider {
     }
 
     function stakeProvider(uint64 amount, uint64 unlockPeriod) external {
-        ProviderState storage ss = providerStates[msg.sender];
+        ProviderState storage providerState = providerStates[msg.sender];
+        require(providerState.whitelisted, 'not whitelisted');
         require(amount > 0, 'amount must be positive');
-        require(ss.balance <= amount, 'cannot decrease balance');
+        require(providerState.balance <= amount, 'cannot decrease balance');
         require(unlockPeriod <= 1000 days, 'unlockPeriod cannot be higher than 1000 days');
-        require(ss.unlockPeriod <= unlockPeriod, 'cannot decrease unlock period');
+        require(providerState.unlockPeriod <= unlockPeriod, 'cannot decrease unlock period');
         require(unlockPeriod >= 2 weeks, "unlock period can't be less than 2 weeks");
 
-        updateAccumulated(ss);
+        updateAccumulated(providerState);
 
-        uint128 delta = amount - ss.balance;
+        uint128 delta = amount - providerState.balance;
         if (delta > 0) {
             require(token.transferFrom(msg.sender, address(this), delta), 'transfer unsuccessful');
         }
 
-        ss.balance = amount;
-        ss.unlockPeriod = unlockPeriod;
-        ss.lockedUntil = 0;
-        ss.since = uint64(block.timestamp);
-        ProviderStateChange memory nextStakeChange = ss.providerStateTimeline[getCurrentEpoch() + 1];
+        providerState.balance = amount;
+        providerState.unlockPeriod = unlockPeriod;
+        providerState.lockedUntil = 0;
+        providerState.since = uint64(block.timestamp);
+        ProviderStateChange memory nextStakeChange = providerState.providerStateTimeline[getCurrentEpoch() + 1];
         nextStakeChange.balanceChanged = true;
         nextStakeChange.balance = amount;
         emit StakeUpdate(msg.sender, amount);
@@ -155,21 +156,19 @@ contract TwoWeeksNoticeProvider {
 
     function calculateTotalDelegation(uint32 epoch, address account) public view returns (uint128 latestTotalDelegations) {
         ProviderStateChange memory stakeChange;
+        uint32 latestTotalDelegationsEpoch;
         for (uint32 i = epoch; i >= 0; i--) {
             stakeChange = providerStates[account].providerStateTimeline[i];
             if (stakeChange.totalDelegationsSet) {
                 latestTotalDelegations = stakeChange.totalDelegations;
-
-                for (uint32 j = i + 1; i <= epoch; j++) {
-                    stakeChange = providerStates[account].providerStateTimeline[j];
-                    latestTotalDelegations =
-                        latestTotalDelegations +
-                        stakeChange.delegationsIncrease -
-                        stakeChange.delegationsDecrease;
-                }
+                latestTotalDelegationsEpoch = i;
                 break;
             }
             if (i == 0) break;
+        }
+        for (uint32 i = latestTotalDelegationsEpoch + 1; i <= epoch; i++) {
+            stakeChange = providerStates[account].providerStateTimeline[i];
+            latestTotalDelegations = latestTotalDelegations + stakeChange.delegationsIncrease - stakeChange.delegationsDecrease;
         }
         return latestTotalDelegations;
     }
@@ -201,13 +200,17 @@ contract TwoWeeksNoticeProvider {
         uint128 additionalRewards;
         if (currentEpoch - 1 > claimedEpochReward) {
             for (uint32 i = claimedEpochReward + 1; i < currentEpoch; i++) {
-                totalDelegations = calculateTotalDelegation(i, msg.sender);
+                ProviderStateChange storage psc = providerState.providerStateTimeline[i];
+
+                // if provider is unstaked or removed from whitelist, they should get no reward for the week
+                totalDelegations = (psc.balanceChanged && psc.balance == 0) ? 0 : calculateTotalDelegation(i, msg.sender);
+
                 if (totalDelegations != prevTotalDelegations) {
-                    providerState.providerStateTimeline[i].totalDelegations = totalDelegations;
-                    providerState.providerStateTimeline[i].totalDelegationsSet = true;
+                    psc.totalDelegations = totalDelegations;
+                    psc.totalDelegationsSet = true;
                 }
                 reward += uint128(1 * totalDelegations * epochLength); // TODO: Set a correct percentage - what will provider earn on total that is delegated to them
-                additionalRewards += providerState.providerStateTimeline[i].additionalReward;
+                additionalRewards += psc.additionalReward;
             }
             reward = reward / (1000000 * 86400) + additionalRewards;
         }
@@ -242,26 +245,30 @@ contract TwoWeeksNoticeProvider {
 
     function removeFromWhitelist(address account) public {
         require(msg.sender == owner);
-        ProviderState storage ss = providerStates[account];
+        ProviderState storage providerState = providerStates[account];
+        uint32 nextEpoch = getCurrentEpoch() + 1;
 
         // withdraw for provider
-        if (ss.balance > 0) {
-            updateAccumulated(ss); // TODO: Provider yield gets removed, find workaround?
-            uint128 balance = ss.balance;
-            ss.balance = 0;
-            ss.unlockPeriod = 0;
-            ss.lockedUntil = 0;
-            ss.since = 0;
+        if (providerState.balance > 0) {
+            updateAccumulated(providerState); // TODO: Provider yield gets removed, find workaround?
+            uint128 balance = providerState.balance;
+            providerState.balance = 0;
+            providerState.unlockPeriod = 0;
+            providerState.lockedUntil = 0;
+            providerState.since = 0;
 
-            ProviderStateChange storage nextStakeChange = ss.providerStateTimeline[getCurrentEpoch() + 1];
+            ProviderStateChange storage nextStakeChange = providerState.providerStateTimeline[nextEpoch];
             nextStakeChange.balanceChanged = true;
             nextStakeChange.balance = 0;
             require(token.transfer(account, balance), 'transfer unsuccessful');
             emit StakeUpdate(msg.sender, 0);
         }
 
+        providerState.providerStateTimeline[nextEpoch].totalDelegations = 0;
+        providerState.providerStateTimeline[nextEpoch].totalDelegationsSet = true;
+
         // remove from whitelist
-        ss.whitelisted = false;
+        providerState.whitelisted = false;
     }
 
     function getCurrentEpoch() public view returns (uint32) {

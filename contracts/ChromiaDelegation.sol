@@ -149,6 +149,7 @@ contract ChromiaDelegation is TwoWeeksNoticeProvider {
         (uint64 delegateAmount, , uint64 lockedUntil, ) = twn.getStakeState(msg.sender);
         require(delegateAmount > 0, 'Must have a stake to delegate');
         require(lockedUntil == 0, 'Cannot change delegation while withdrawing');
+        require(providerStates[to].whitelisted, 'Provider must be whitelisted');
 
         uint32 currentEpoch = getCurrentEpoch();
 
