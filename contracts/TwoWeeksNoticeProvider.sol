@@ -197,6 +197,7 @@ contract TwoWeeksNoticeProvider {
 
         uint128 totalDelegations;
         uint128 prevTotalDelegations;
+        uint128 additionalRewards;
         if (currentEpoch - 1 > claimedEpochReward) {
             for (uint32 i = claimedEpochReward + 1; i < currentEpoch; i++) {
                 totalDelegations = calculateTotalDelegation(i, msg.sender);
@@ -205,10 +206,9 @@ contract TwoWeeksNoticeProvider {
                     providerState.providerStateTimeline[i].totalDelegationsSet = true;
                 }
                 reward += uint128(1 * totalDelegations * epochLength); // TODO: Set a correct percentage - what will provider earn on total that is delegated to them
+                additionalRewards += providerState.providerStateTimeline[i].additionalReward;
             }
-
-            if (reward == 0) return 0;
-            reward /= 1000000 * 86400;
+            reward = reward / (1000000 * 86400) + additionalRewards;
         }
     }
 
