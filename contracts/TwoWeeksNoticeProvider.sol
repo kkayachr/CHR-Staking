@@ -178,7 +178,7 @@ contract TwoWeeksNoticeProvider {
         (uint128 acc, ) = estimateAccumulated(account);
         if (acc > prevPaid) {
             uint128 delta = acc - prevPaid;
-            reward = (1 * delta) / 1000000; // TODO: ADD A RATIO
+            reward = (rewardPerDayPerTokenProvider * delta) / 1000000;
         }
     }
 
