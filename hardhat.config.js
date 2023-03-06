@@ -2,6 +2,7 @@
 require("dotenv").config();
 require("@nomiclabs/hardhat-waffle");
 require("@nomiclabs/hardhat-etherscan");
+require("hardhat-gas-reporter");
 
 const BSCTESTNET_PRIVATE_KEY = process.env.BSCTESTNET_PRIVATE_KEY;
 const RPC_NODE = process.env.RPC_NODE;
@@ -16,6 +17,13 @@ module.exports = {
         runs: 200,
       },
     },
+  },
+  gasReporter: {
+    currency: "USD",
+    token: "ETH",
+    gasPriceApi: "https://api.etherscan.io/api?module=proxy&action=eth_gasPrice",
+    coinmarketcap: "0431b70e-ffff-4061-81b0-fa361384d36c",
+    // enabled: (process.env.REPORT_GAS) ? true : false
   },
   networks: {
     hardhat: {

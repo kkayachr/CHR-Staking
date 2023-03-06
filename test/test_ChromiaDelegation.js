@@ -337,4 +337,36 @@ describe("ChromiaDelegation", function () {
     // Yield has been received
     await expect(postBalance - preBalance).to.eq(expectedYield);
   });
+
+
+  xit("GAS TEST", async () => {
+    const { chromiaDelegation, twoWeeksNotice, erc20Mock, owner, randomAddresses } =
+      await loadFixture(deployChromiaDelegation);
+
+    await chromiaDelegation.connect(randomAddresses[0]).delegate(owner.address);
+    await time.increase(weeks(3));
+    await expect(chromiaDelegation.connect(randomAddresses[0]).claimYield(randomAddresses[0].address)).to.not.be.reverted;
+    await time.increase(weeks(3));
+    await expect(chromiaDelegation.connect(randomAddresses[0]).claimYield(randomAddresses[0].address)).to.not.be.reverted;
+    await time.increase(weeks(3));
+    await expect(chromiaDelegation.connect(randomAddresses[0]).claimYield(randomAddresses[0].address)).to.not.be.reverted;
+    await time.increase(weeks(3));
+    await expect(chromiaDelegation.connect(randomAddresses[0]).claimYield(randomAddresses[0].address)).to.not.be.reverted;
+    await time.increase(weeks(3));
+    await expect(chromiaDelegation.connect(randomAddresses[0]).claimYield(randomAddresses[0].address)).to.not.be.reverted;
+    await time.increase(weeks(3));
+    await expect(chromiaDelegation.connect(randomAddresses[0]).claimYield(randomAddresses[0].address)).to.not.be.reverted;
+    await time.increase(weeks(3));
+    await expect(chromiaDelegation.connect(randomAddresses[0]).claimYield(randomAddresses[0].address)).to.not.be.reverted;
+    await time.increase(weeks(3));
+    await expect(chromiaDelegation.connect(randomAddresses[0]).claimYield(randomAddresses[0].address)).to.not.be.reverted;
+    await time.increase(weeks(3));
+    await expect(chromiaDelegation.connect(randomAddresses[0]).claimYield(randomAddresses[0].address)).to.not.be.reverted;
+    await time.increase(weeks(3));
+    await expect(chromiaDelegation.connect(randomAddresses[0]).claimYield(randomAddresses[0].address)).to.not.be.reverted;
+    await time.increase(weeks(3));
+    await expect(chromiaDelegation.connect(randomAddresses[0]).claimYield(randomAddresses[0].address)).to.not.be.reverted;
+    await time.increase(weeks(3));
+    await expect(chromiaDelegation.connect(randomAddresses[0]).claimYield(randomAddresses[0].address)).to.not.be.reverted;
+  });
 });

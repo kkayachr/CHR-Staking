@@ -16,7 +16,8 @@
     "@nomicfoundation/hardhat-network-helpers": "^1.0.7",
     "@nomiclabs/hardhat-waffle": "^2.0.3",
     "@openzeppelin/contracts": "^4.8.1",
-    "dotenv": "^16.0.3"
+    "dotenv": "^16.0.3",
+    "hardhat-gas-reporter": "^1.0.9"
   },
   "prettier": {
     "trailingComma": "es5",
