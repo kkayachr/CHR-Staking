@@ -11,7 +11,7 @@ import 'hardhat/console.sol';
 
 struct ProviderStateChange {
     uint128 balance;
-    uint128 extraReward;
+    uint128 additionalReward;
     uint128 totalDelegations;
     uint128 delegationsIncrease;
     uint128 delegationsDecrease;
@@ -229,11 +229,18 @@ contract TwoWeeksNoticeProvider {
         token.transfer(msg.sender, reward);
     }
 
+    function grantAdditionalReward(address account, uint128 amount) public {
+        require(msg.sender == owner);
+        providerStates[account].providerStateTimeline[getCurrentEpoch() + 1].additionalReward += amount;
+    }
+
     function addToWhitelist(address account) public {
+        require(msg.sender == owner);
         providerStates[account].whitelisted = true;
     }
 
     function removeFromWhitelist(address account) public {
+        require(msg.sender == owner);
         ProviderState storage ss = providerStates[account];
 
         // withdraw for provider
