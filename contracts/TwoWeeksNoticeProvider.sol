@@ -103,6 +103,7 @@ contract TwoWeeksNoticeProvider {
 
     function stakeProvider(uint64 amount, uint64 unlockPeriod) external {
         ProviderState storage providerState = providerStates[msg.sender];
+
         require(providerState.whitelisted, 'not whitelisted');
         require(amount > 0, 'amount must be positive');
         require(providerState.balance <= amount, 'cannot decrease balance');
