@@ -9,8 +9,7 @@ pragma solidity ^0.8.17;
 import '@openzeppelin/contracts/token/ERC20/IERC20.sol';
 import 'hardhat/console.sol';
 
-// TODO: change name of this struct
-struct StakeChange {
+struct ProviderStateChange {
     uint128 balance;
     uint128 extraReward;
     uint128 totalDelegations;
@@ -18,10 +17,11 @@ struct StakeChange {
     uint128 delegationsDecrease;
     bool totalDelegationsSet;
     bool balanceChanged;
+    bool removedFromWhitelist;
 }
 
 contract TwoWeeksNoticeProvider {
-    struct StakeState {
+    struct ProviderState {
         uint128 accumulated; // token-days staked
         uint128 accumulatedStrict; // token-days staked sans withdraw periods
         uint128 processed;
@@ -30,14 +30,14 @@ contract TwoWeeksNoticeProvider {
         uint64 since;
         uint64 balance;
         uint32 claimedEpochReward;
-        mapping(uint32 => StakeChange) stakeTimeline; // TODO: change name
+        bool whitelisted;
+        mapping(uint32 => ProviderStateChange) providerStateTimeline;
     }
 
     event StakeUpdate(address indexed from, uint64 balance);
     event WithdrawRequest(address indexed from, uint64 until);
 
-    mapping(address => StakeState) internal _states;
-    mapping(address => bool) internal providerWhitelisted;
+    mapping(address => ProviderState) internal providerStates;
 
     uint64 public rewardPerDayPerTokenProvider;
     IERC20 internal token;
@@ -56,18 +56,18 @@ contract TwoWeeksNoticeProvider {
         rewardPerDayPerTokenProvider = rewardRate;
     }
 
-    function getStakeState(address account) external view returns (uint64, uint64, uint64, uint64, uint128) {
-        StakeState storage ss = _states[account];
+    function getProviderStakeState(address account) external view returns (uint64, uint64, uint64, uint64, uint128) {
+        ProviderState storage ss = providerStates[account];
         return (ss.balance, ss.unlockPeriod, ss.lockedUntil, ss.since, ss.processed);
     }
 
     function getAccumulated(address account) external view returns (uint128, uint128) {
-        StakeState storage ss = _states[account];
+        ProviderState storage ss = providerStates[account];
         return (ss.accumulated, ss.accumulatedStrict);
     }
 
     function estimateAccumulated(address account) public view returns (uint128, uint128) {
-        StakeState storage ss = _states[account];
+        ProviderState storage ss = providerStates[account];
         uint128 sum = ss.accumulated;
         uint128 sumStrict = ss.accumulatedStrict;
         if (ss.balance > 0) {
@@ -86,7 +86,7 @@ contract TwoWeeksNoticeProvider {
         return (sum, sumStrict);
     }
 
-    function updateAccumulated(StakeState storage ss) private {
+    function updateAccumulated(ProviderState storage ss) private {
         if (ss.balance > 0) {
             uint256 until = block.timestamp;
             if (ss.lockedUntil > 0 && ss.lockedUntil < block.timestamp) {
@@ -102,8 +102,8 @@ contract TwoWeeksNoticeProvider {
         }
     }
 
-    function stake(uint64 amount, uint64 unlockPeriod) external {
-        StakeState storage ss = _states[msg.sender];
+    function stakeProvider(uint64 amount, uint64 unlockPeriod) external {
+        ProviderState storage ss = providerStates[msg.sender];
         require(amount > 0, 'amount must be positive');
         require(ss.balance <= amount, 'cannot decrease balance');
         require(unlockPeriod <= 1000 days, 'unlockPeriod cannot be higher than 1000 days');
@@ -121,14 +121,14 @@ contract TwoWeeksNoticeProvider {
         ss.unlockPeriod = unlockPeriod;
         ss.lockedUntil = 0;
         ss.since = uint64(block.timestamp);
-        StakeChange memory nextStakeChange = ss.stakeTimeline[getCurrentEpoch() + 1];
+        ProviderStateChange memory nextStakeChange = ss.providerStateTimeline[getCurrentEpoch() + 1];
         nextStakeChange.balanceChanged = true;
         nextStakeChange.balance = amount;
         emit StakeUpdate(msg.sender, amount);
     }
 
     function requestWithdrawProvider() external {
-        StakeState storage ss = _states[msg.sender];
+        ProviderState storage ss = providerStates[msg.sender];
         require(ss.balance > 0);
         updateAccumulated(ss);
         ss.since = uint64(block.timestamp);
@@ -136,7 +136,7 @@ contract TwoWeeksNoticeProvider {
     }
 
     function withdrawProvider(address to) external {
-        StakeState storage ss = _states[msg.sender];
+        ProviderState storage ss = providerStates[msg.sender];
         require(ss.balance > 0, 'must have tokens to withdraw');
         // require(ss.lockedUntil != 0, 'unlock not requested');
         // require(ss.lockedUntil < block.timestamp, 'still locked');
@@ -147,7 +147,7 @@ contract TwoWeeksNoticeProvider {
         ss.lockedUntil = 0;
         ss.since = 0;
 
-        StakeChange storage nextStakeChange = ss.stakeTimeline[getCurrentEpoch() + 1];
+        ProviderStateChange storage nextStakeChange = ss.providerStateTimeline[getCurrentEpoch() + 1];
         nextStakeChange.balanceChanged = true;
         nextStakeChange.balance = 0;
         require(token.transfer(to, balance), 'transfer unsuccessful');
@@ -155,10 +155,10 @@ contract TwoWeeksNoticeProvider {
     }
 
     function calculateTotalDelegation(uint32 epoch, address account) public view returns (uint128 latestTotalDelegations) {
-        StakeChange memory stakeChange;
+        ProviderStateChange memory stakeChange;
         uint32 latestTotalDelegationsEpoch;
         for (uint32 i = epoch; i >= 0; i--) {
-            stakeChange = _states[account].stakeTimeline[i];
+            stakeChange = providerStates[account].providerStateTimeline[i];
             if (stakeChange.totalDelegationsSet) {
                 latestTotalDelegations = stakeChange.totalDelegations;
                 latestTotalDelegationsEpoch = i;
@@ -167,14 +167,14 @@ contract TwoWeeksNoticeProvider {
             if (i == 0) break;
         }
         for (uint32 i = latestTotalDelegationsEpoch + 1; i <= epoch; i++) {
-            stakeChange = _states[account].stakeTimeline[i];
+            stakeChange = providerStates[account].providerStateTimeline[i];
             latestTotalDelegations = latestTotalDelegations + stakeChange.delegationsIncrease - stakeChange.delegationsDecrease;
         }
         return latestTotalDelegations;
     }
 
     function estimateProviderYield(address account) public view returns (uint128 reward) {
-        uint128 prevPaid = _states[msg.sender].processed;
+        uint128 prevPaid = providerStates[msg.sender].processed;
         (uint128 acc, ) = estimateAccumulated(account);
         if (acc > prevPaid) {
             uint128 delta = acc - prevPaid;
@@ -186,12 +186,12 @@ contract TwoWeeksNoticeProvider {
         uint128 reward = estimateProviderYield(msg.sender);
         require(reward > 0, 'reward is 0');
         (uint128 acc, ) = estimateAccumulated(msg.sender);
-        _states[msg.sender].processed = acc;
+        providerStates[msg.sender].processed = acc;
         token.transfer(msg.sender, reward);
     }
 
     function estimateProviderDelegationReward() public returns (uint128 reward) {
-        StakeState storage providerState = _states[msg.sender];
+        ProviderState storage providerState = providerStates[msg.sender];
         uint32 claimedEpochReward = providerState.claimedEpochReward;
         uint32 currentEpoch = getCurrentEpoch();
 
@@ -201,8 +201,8 @@ contract TwoWeeksNoticeProvider {
             for (uint32 i = claimedEpochReward + 1; i < currentEpoch; i++) {
                 totalDelegations = calculateTotalDelegation(i, msg.sender);
                 if (totalDelegations != prevTotalDelegations) {
-                    providerState.stakeTimeline[i].totalDelegations = totalDelegations;
-                    providerState.stakeTimeline[i].totalDelegationsSet = true;
+                    providerState.providerStateTimeline[i].totalDelegations = totalDelegations;
+                    providerState.providerStateTimeline[i].totalDelegationsSet = true;
                 }
                 reward += uint128(1 * totalDelegations * epochLength); // TODO: Set a correct percentage - what will provider earn on total that is delegated to them
             }
@@ -215,7 +215,7 @@ contract TwoWeeksNoticeProvider {
     function claimProviderDelegationReward() public {
         uint128 reward = estimateProviderDelegationReward();
         require(reward > 0, 'reward is 0');
-        _states[msg.sender].claimedEpochReward = getCurrentEpoch() - 1;
+        providerStates[msg.sender].claimedEpochReward = getCurrentEpoch() - 1;
         token.transfer(msg.sender, reward);
     }
 
@@ -224,9 +224,36 @@ contract TwoWeeksNoticeProvider {
         reward += estimateProviderYield(msg.sender);
         require(reward > 0, 'reward is 0');
         (uint128 acc, ) = estimateAccumulated(msg.sender);
-        _states[msg.sender].processed = acc;
-        _states[msg.sender].claimedEpochReward = getCurrentEpoch() - 1;
+        providerStates[msg.sender].processed = acc;
+        providerStates[msg.sender].claimedEpochReward = getCurrentEpoch() - 1;
         token.transfer(msg.sender, reward);
+    }
+
+    function addToWhitelist(address account) public {
+        providerStates[account].whitelisted = true;
+    }
+
+    function removeFromWhitelist(address account) public {
+        ProviderState storage ss = providerStates[account];
+
+        // withdraw for provider
+        if (ss.balance > 0) {
+            updateAccumulated(ss); // TODO: Provider yield gets removed, find workaround
+            uint128 balance = ss.balance;
+            ss.balance = 0;
+            ss.unlockPeriod = 0;
+            ss.lockedUntil = 0;
+            ss.since = 0;
+
+            ProviderStateChange storage nextStakeChange = ss.providerStateTimeline[getCurrentEpoch() + 1];
+            nextStakeChange.balanceChanged = true;
+            nextStakeChange.balance = 0;
+            require(token.transfer(account, balance), 'transfer unsuccessful');
+            emit StakeUpdate(msg.sender, 0);
+        }
+
+        // remove from whitelist
+        ss.whitelisted = false;
     }
 
     function getCurrentEpoch() public view returns (uint32) {

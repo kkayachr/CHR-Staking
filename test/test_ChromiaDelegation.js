@@ -41,7 +41,7 @@ describe("ChromiaDelegation", function () {
     await erc20Mock.connect(randomAddresses[0]).increaseAllowance(twoWeeksNotice.address, 20000000000);
     await erc20Mock.increaseAllowance(chromiaDelegation.address, 20000000000);
     await twoWeeksNotice.connect(randomAddresses[0]).stake(10000000000, days(14));
-    await chromiaDelegation.stake(10000000000, days(14));
+    await chromiaDelegation.stakeProvider(10000000000, days(14));
 
     await time.increase(days(365));
 
@@ -160,7 +160,7 @@ describe("ChromiaDelegation", function () {
     // Provider received yield
     await expect(postBalance - preBalance).to.eq(estimatedYield);
 
-    let processed = (await chromiaDelegation.getStakeState(owner.address))[4];
+    let processed = (await chromiaDelegation.getProviderStakeState(owner.address))[4];
     await expect(processed).to.be.closeTo(expectedProcessed, Math.round(expectedProcessed.toNumber() * 0.0000001));
   });
 
@@ -192,7 +192,7 @@ describe("ChromiaDelegation", function () {
     let expectedYield = await chromiaDelegation.estimateYield(randomAddresses[0].address);
     await time.increase(weeks(5));
 
-    await chromiaDelegation.stake(10000000000, days(14));
+    await chromiaDelegation.stakeProvider(10000000000, days(14));
     await time.increase(weeks(5));
     await chromiaDelegation.withdrawProvider(owner.address);
     await time.increase(weeks(5));

@@ -90,7 +90,7 @@ contract ChromiaDelegation is TwoWeeksNoticeProvider {
 
             uint128 activeRate = getActiveRate(processedEpoch + 1);
             DelegationChange memory activeDelegation = getActiveDelegation(account, processedEpoch + 1);
-            StakeState storage providerState = _states[activeDelegation.delegatedTo];
+            ProviderState storage providerState = providerStates[activeDelegation.delegatedTo];
             // TODO: get active provider stake from its timeline - is provider even staked?
 
             for (uint32 i = processedEpoch + 1; i < currentEpoch; i++) {
@@ -102,7 +102,9 @@ contract ChromiaDelegation is TwoWeeksNoticeProvider {
                 // Check if users delegation changes this epoch
                 activeDelegation = userState.delegationTimeline[i].changed ? userState.delegationTimeline[i] : activeDelegation;
 
-                if (providerState.stakeTimeline[i].balanceChanged && providerState.stakeTimeline[i].balance == 0) {
+                if (
+                    providerState.providerStateTimeline[i].balanceChanged && providerState.providerStateTimeline[i].balance == 0
+                ) {
                     // if provider withdrew, stop counting reward
                     break;
                 } else if (activeDelegation.delegatedTo == address(0)) {
@@ -152,8 +154,8 @@ contract ChromiaDelegation is TwoWeeksNoticeProvider {
 
         // Remove previous delegation from providers pool
         DelegationChange memory currentDelegation = getActiveDelegation(msg.sender, currentEpoch + 1);
-        StakeState storage prevProviderState = _states[currentDelegation.delegatedTo];
-        prevProviderState.stakeTimeline[currentEpoch + 1].delegationsDecrease += currentDelegation.balance;
+        ProviderState storage prevProviderState = providerStates[currentDelegation.delegatedTo];
+        prevProviderState.providerStateTimeline[currentEpoch + 1].delegationsDecrease += currentDelegation.balance;
 
         if (userState.claimedEpoch == 0) userState.claimedEpoch = currentEpoch;
         // BUG HERE, if claimedEpoch stays the same and processed becomes acc, users can cheat and earn rewards without staking
@@ -164,8 +166,8 @@ contract ChromiaDelegation is TwoWeeksNoticeProvider {
         userState.delegationTimeline[currentEpoch + 1] = DelegationChange(delegateAmount, to, true);
 
         // Add delegation to new providers pool
-        StakeState storage providerState = _states[to];
-        providerState.stakeTimeline[currentEpoch + 1].delegationsIncrease += delegateAmount;
+        ProviderState storage providerState = providerStates[to];
+        providerState.providerStateTimeline[currentEpoch + 1].delegationsIncrease += delegateAmount;
     }
 
     function undelegate() public {
