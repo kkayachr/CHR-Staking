@@ -19,13 +19,13 @@ interface TwoWeeksNotice {
 contract ChromiaDelegation is TwoWeeksNoticeProvider {
     struct RewardPerDayPerTokenChange {
         uint128 rewardPerDayPerToken;
-        uint32 epoch;
+        bool changed;
     }
 
     struct DelegationChange {
         uint128 balance;
         address delegatedTo;
-        uint32 epoch;
+        bool changed;
     }
 
     struct DelegationState {
@@ -33,11 +33,13 @@ contract ChromiaDelegation is TwoWeeksNoticeProvider {
         uint128 processedDate;
         uint128 balanceAtProcessed;
         uint32 claimedEpoch;
-        DelegationChange[] delegationTimeline;
+        mapping(uint32 => DelegationChange) delegationTimeline; // each uint key is a week starting from "startTime"
+        uint32[] delegationTimelineChanges;
     }
 
     mapping(address => DelegationState) public delegations;
-    RewardPerDayPerTokenChange[] rewardPerDayPerTokenTimeline;
+    mapping(uint32 => RewardPerDayPerTokenChange) public rewardPerDayPerTokenTimeline;
+    uint32[] rewardPerDayPerTokenTimelineChanges;
 
     TwoWeeksNotice public twn;
 
@@ -49,7 +51,8 @@ contract ChromiaDelegation is TwoWeeksNoticeProvider {
         uint64 initial_reward_provider,
         uint64 initial_del_reward_provider
     ) TwoWeeksNoticeProvider(_token, _owner, initial_reward_provider, initial_del_reward_provider) {
-        rewardPerDayPerTokenTimeline.push(RewardPerDayPerTokenChange(initial_reward, 0));
+        rewardPerDayPerTokenTimeline[0] = RewardPerDayPerTokenChange(initial_reward, true);
+        rewardPerDayPerTokenTimelineChanges.push(0);
         twn = _twn;
     }
 
@@ -64,15 +67,16 @@ contract ChromiaDelegation is TwoWeeksNoticeProvider {
 
     function setRewardRate(uint64 rewardRate) external {
         require(msg.sender == owner);
-        rewardPerDayPerTokenTimeline.push(RewardPerDayPerTokenChange(rewardRate, getCurrentEpoch() + 1));
+        rewardPerDayPerTokenTimeline[getCurrentEpoch() + 1] = RewardPerDayPerTokenChange(rewardRate, true);
+        rewardPerDayPerTokenTimelineChanges.push(getCurrentEpoch() + 1);
     }
 
     function getActiveDelegation(address account, uint32 epoch) public view returns (DelegationChange memory activeDelegation) {
         DelegationState storage userState = delegations[account];
-        if (userState.delegationTimeline.length > 0) {
-            for (uint i = userState.delegationTimeline.length - 1; i >= 0; i--) {
-                if (userState.delegationTimeline[i].epoch <= epoch) {
-                    return userState.delegationTimeline[i];
+        if (userState.delegationTimelineChanges.length > 0) {
+            for (uint i = userState.delegationTimelineChanges.length - 1; i >= 0; i--) {
+                if (userState.delegationTimelineChanges[i] <= epoch) {
+                    return userState.delegationTimeline[userState.delegationTimelineChanges[i]];
                 }
                 if (i == 0) break;
             }
@@ -80,9 +84,9 @@ contract ChromiaDelegation is TwoWeeksNoticeProvider {
     }
 
     function getActiveRate(uint32 epoch) public view returns (uint128 activeRate) {
-        for (uint i = rewardPerDayPerTokenTimeline.length - 1; i >= 0; i--) {
-            if (rewardPerDayPerTokenTimeline[i].epoch <= epoch) {
-                return rewardPerDayPerTokenTimeline[i].rewardPerDayPerToken;
+        for (uint i = rewardPerDayPerTokenTimelineChanges.length - 1; i >= 0; i--) {
+            if (rewardPerDayPerTokenTimelineChanges[i] <= epoch) {
+                return rewardPerDayPerTokenTimeline[rewardPerDayPerTokenTimelineChanges[i]].rewardPerDayPerToken;
             }
             if (i == 0) break;
         }
