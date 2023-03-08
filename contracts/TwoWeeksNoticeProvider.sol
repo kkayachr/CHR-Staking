@@ -210,6 +210,10 @@ contract TwoWeeksNoticeProvider {
                 ProviderStateChange storage psc = providerState.providerStateTimeline[i];
                 totalDelegations += psc.delegationsIncrease - psc.delegationsDecrease;
 
+                if (psc.balanceChanged && psc.balance == 0) {
+                    totalDelegations = 0;
+                }
+
                 reward += uint128(rewardPerDayPerTotalDelegation * totalDelegations * epochLength);
             }
             reward = reward / (1000000 * 86400);
