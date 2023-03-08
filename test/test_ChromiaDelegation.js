@@ -10,8 +10,8 @@ const { ethers } = require("hardhat");
 require("dotenv").config();
 
 
-function calcExpectedReward(stake, weeks) {
-  return ((stake * 7 * weeks) / 1000000);
+function calcExpectedReward(stake, weeks, rewardsPerDayPerToken) {
+  return ((stake * 7 * weeks) / 1000000) * rewardsPerDayPerToken;
 }
 
 describe("ChromiaDelegation", function () {
@@ -32,7 +32,7 @@ describe("ChromiaDelegation", function () {
     await twoWeeksNotice.deployed();
 
     const ChromiaDelegation = await ethers.getContractFactory("ChromiaDelegation");
-    const chromiaDelegation = await ChromiaDelegation.deploy(erc20Mock.address, twoWeeksNotice.address, owner.address, 1, 1);
+    const chromiaDelegation = await ChromiaDelegation.deploy(erc20Mock.address, twoWeeksNotice.address, owner.address, 548, 548, 1);
     await chromiaDelegation.deployed();
 
 
@@ -74,7 +74,7 @@ describe("ChromiaDelegation", function () {
       const { chromiaDelegation, twoWeeksNotice, erc20Mock, owner, randomAddresses } =
         await loadFixture(deployChromiaDelegation);
 
-      let expectedReward = calcExpectedReward(10000000000, 5);
+      let expectedReward = calcExpectedReward(10000000000, 5, 548);
 
       await chromiaDelegation.connect(randomAddresses[0]).delegate(owner.address);
       await time.increase(weeks(6));
@@ -120,7 +120,7 @@ describe("ChromiaDelegation", function () {
       const { chromiaDelegation, twoWeeksNotice, erc20Mock, owner, randomAddresses } =
         await loadFixture(deployChromiaDelegation);
 
-      var expectedReward = calcExpectedReward(10000000000, 4);
+      var expectedReward = calcExpectedReward(10000000000, 4, 548);
 
       await chromiaDelegation.connect(randomAddresses[0]).delegate(owner.address);
       await time.increase(weeks(3));
@@ -161,7 +161,7 @@ describe("ChromiaDelegation", function () {
       // Claim yield
       await chromiaDelegation.connect(randomAddresses[0]).claimYield(randomAddresses[0].address);
       let postBalance = await erc20Mock.balanceOf(randomAddresses[0].address);
-      var expectedReward = calcExpectedReward(10000000000, 5);
+      var expectedReward = calcExpectedReward(10000000000, 5, 548);
       await expect(postBalance - preBalance).to.eq(expectedReward);
     });
 
@@ -186,7 +186,7 @@ describe("ChromiaDelegation", function () {
       // Claim yield
       await chromiaDelegation.connect(randomAddresses[0]).claimYield(randomAddresses[0].address);
       let postBalance = await erc20Mock.balanceOf(randomAddresses[0].address);
-      var expectedReward = calcExpectedReward(10000000000, 5);
+      var expectedReward = calcExpectedReward(10000000000, 5, 548);
       await expect(postBalance - preBalance).to.eq(expectedReward);
     });
 
@@ -206,7 +206,7 @@ describe("ChromiaDelegation", function () {
       let postBalance = await erc20Mock.balanceOf(owner.address);
 
       // Provider received yield
-      await expect(postBalance - preBalance).to.eq(estimatedYield);
+      await expect(postBalance - preBalance).to.be.closeTo(estimatedYield, Math.round(estimatedYield * 0.0000001));
 
       let processed = (await chromiaDelegation.getProviderStakeState(owner.address))[4];
       await expect(processed).to.be.closeTo(expectedProcessed, Math.round(expectedProcessed.toNumber() * 0.0000001));
@@ -221,7 +221,7 @@ describe("ChromiaDelegation", function () {
       await time.increase(weeks(5));
 
       let totalDelegation = await chromiaDelegation.calculateTotalDelegation(await chromiaDelegation.getCurrentEpoch(), owner.address);
-      var expectedReward = await calcExpectedReward(totalDelegation, 4);
+      var expectedReward = await calcExpectedReward(totalDelegation, 4, 1);
 
       console.log(expectedReward);
 
@@ -237,11 +237,11 @@ describe("ChromiaDelegation", function () {
     it("Should let provider claim additional rewards", async () => {
       const { chromiaDelegation, twoWeeksNotice, erc20Mock, owner, randomAddresses } =
         await loadFixture(deployChromiaDelegation);
-
-      await chromiaDelegation.grantAdditionalReward(owner.address, 1000000);
+      let currentEpoch = await chromiaDelegation.getCurrentEpoch();
+      await chromiaDelegation.grantAdditionalReward(owner.address, 1000000, currentEpoch + 1);
 
       var expectedReward = 1000000;
-      await time.increase(weeks(2));
+      await time.increase(weeks(10));
 
       preBalance = await erc20Mock.balanceOf(owner.address);
       // Claim provider delegation reward
@@ -277,7 +277,7 @@ describe("ChromiaDelegation", function () {
 
 
     // Provider claiming delegation reward + their own yield
-    it("Provider reward should stop accumulating when removed from whitelist", async () => {
+    it("Provider delegator reward should stop accumulating when removed from whitelist", async () => {
       const { chromiaDelegation, twoWeeksNotice, erc20Mock, owner, randomAddresses } =
         await loadFixture(deployChromiaDelegation);
 
@@ -286,9 +286,34 @@ describe("ChromiaDelegation", function () {
       await time.increase(weeks(5));
 
       let totalDelegation = await chromiaDelegation.calculateTotalDelegation(await chromiaDelegation.getCurrentEpoch(), owner.address);
-      var expectedReward = await calcExpectedReward(totalDelegation, 4);
+      var expectedReward = await calcExpectedReward(totalDelegation, 5);
 
+      await chromiaDelegation.removeFromWhitelist(owner.address);
+      await time.increase(weeks(8));
+
+      preBalance = await erc20Mock.balanceOf(owner.address);
+      // Claim provider delegation reward
+      await chromiaDelegation.claimProviderDelegationReward();
+      postBalance = await erc20Mock.balanceOf(owner.address);
+
+      // // Provider has received fee
+      await expect(postBalance - preBalance).to.eq(expectedReward);
+    }).timeout(10000);
+
+    it("All provider reward should stop accumulating when removed from whitelist", async () => {
+      const { chromiaDelegation, twoWeeksNotice, erc20Mock, owner, randomAddresses } =
+        await loadFixture(deployChromiaDelegation);
+
+      // User delegates stake
+      await chromiaDelegation.connect(randomAddresses[0]).delegate(owner.address);
+      await time.increase(weeks(5));
+
+      let totalDelegation = await chromiaDelegation.calculateTotalDelegation(await chromiaDelegation.getCurrentEpoch(), owner.address);
+      var expectedReward = await calcExpectedReward(totalDelegation, 5);
+
+      await chromiaDelegation.removeFromWhitelist(owner.address);
       let estimatedYield = await chromiaDelegation.estimateProviderYield(owner.address);
+      await time.increase(weeks(10));
 
       preBalance = await erc20Mock.balanceOf(owner.address);
       // Claim provider delegation reward
@@ -300,7 +325,7 @@ describe("ChromiaDelegation", function () {
     }).timeout(10000);
   });
 
-  describe("All", function () {
+  describe("Use flows", function () {
     // User and provider using the contract demonstrated (make sure to see)
     // the deployChromiaDelegation function as well for full use flow.
     it("Normal use flow", async () => {
