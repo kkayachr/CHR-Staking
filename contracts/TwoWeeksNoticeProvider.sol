@@ -39,15 +39,17 @@ contract TwoWeeksNoticeProvider {
     mapping(address => ProviderState) internal providerStates;
 
     uint64 public rewardPerDayPerTokenProvider;
-    IERC20 internal token;
+    uint64 public rewardPerDayPerTotalDelegation;
     address public owner;
     uint internal startTime = block.timestamp;
     uint public epochLength = 1 weeks;
+    IERC20 internal token;
 
-    constructor(IERC20 _token, address _owner, uint64 _rewardPerDayPerTokenProvider) {
+    constructor(IERC20 _token, address _owner, uint64 _rewardPerDayPerTokenProvider, uint64 _rewardPerDayPerTotalDelegation) {
         token = _token;
         owner = _owner;
         rewardPerDayPerTokenProvider = _rewardPerDayPerTokenProvider;
+        rewardPerDayPerTotalDelegation = _rewardPerDayPerTotalDelegation;
     }
 
     function setProviderRewardRate(uint64 rewardRate) external {
@@ -210,7 +212,7 @@ contract TwoWeeksNoticeProvider {
                     psc.totalDelegations = totalDelegations;
                     psc.totalDelegationsSet = true;
                 }
-                reward += uint128(1 * totalDelegations * epochLength); // TODO: Set a correct percentage - what will provider earn on total that is delegated to them
+                reward += uint128(rewardPerDayPerTotalDelegation * totalDelegations * epochLength);
                 additionalRewards += psc.additionalReward;
             }
             reward = reward / (1000000 * 86400) + additionalRewards;
@@ -234,9 +236,9 @@ contract TwoWeeksNoticeProvider {
         token.transfer(msg.sender, reward);
     }
 
-    function grantAdditionalReward(address account, uint128 amount) public {
+    function grantAdditionalReward(address account, uint32 epoch, uint128 amount) public {
         require(msg.sender == owner);
-        providerStates[account].providerStateTimeline[getCurrentEpoch() + 1].additionalReward += amount;
+        providerStates[account].providerStateTimeline[epoch].additionalReward += amount;
     }
 
     function addToWhitelist(address account) public {
