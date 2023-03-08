@@ -11,7 +11,7 @@ import 'hardhat/console.sol';
 
 struct ProviderStateChange {
     uint128 balance;
-    uint128 additionalReward;
+    uint128 additionalRewardPerDayPerToken;
     uint128 totalDelegations;
     uint128 delegationsIncrease;
     uint128 delegationsDecrease;
@@ -162,6 +162,11 @@ contract TwoWeeksNoticeProvider {
         uint32 latestTotalDelegationsEpoch;
         for (uint32 i = epoch; i >= 0; i--) {
             stakeChange = providerStates[account].providerStateTimeline[i];
+            if (stakeChange.balanceChanged && stakeChange.balance == 0) {
+                latestTotalDelegations = 0;
+                latestTotalDelegationsEpoch = i;
+                break;
+            }
             if (stakeChange.totalDelegationsSet) {
                 latestTotalDelegations = stakeChange.totalDelegations;
                 latestTotalDelegationsEpoch = i;
@@ -198,24 +203,21 @@ contract TwoWeeksNoticeProvider {
         uint32 claimedEpochReward = providerState.claimedEpochReward;
         uint32 currentEpoch = getCurrentEpoch();
 
-        uint128 totalDelegations;
-        uint128 prevTotalDelegations;
-        uint128 additionalRewards;
         if (currentEpoch - 1 > claimedEpochReward) {
+            uint128 totalDelegations = calculateTotalDelegation(claimedEpochReward, msg.sender);
+            uint128 prevTotalDelegations = totalDelegations;
             for (uint32 i = claimedEpochReward + 1; i < currentEpoch; i++) {
                 ProviderStateChange storage psc = providerState.providerStateTimeline[i];
+                totalDelegations += psc.delegationsIncrease - psc.delegationsDecrease;
 
-                // if provider is unstaked or removed from whitelist, they should get no reward for the week
-                totalDelegations = (psc.balanceChanged && psc.balance == 0) ? 0 : calculateTotalDelegation(i, msg.sender);
-
-                if (totalDelegations != prevTotalDelegations) {
-                    psc.totalDelegations = totalDelegations;
-                    psc.totalDelegationsSet = true;
-                }
                 reward += uint128(rewardPerDayPerTotalDelegation * totalDelegations * epochLength);
-                additionalRewards += psc.additionalReward;
             }
-            reward = reward / (1000000 * 86400) + additionalRewards;
+            reward = reward / (1000000 * 86400);
+            if (totalDelegations != prevTotalDelegations) {
+                ProviderStateChange storage psc = providerState.providerStateTimeline[currentEpoch - 1];
+                psc.totalDelegations = totalDelegations;
+                psc.totalDelegationsSet = true;
+            }
         }
     }
 
@@ -238,7 +240,7 @@ contract TwoWeeksNoticeProvider {
 
     function grantAdditionalReward(address account, uint32 epoch, uint128 amount) public {
         require(msg.sender == owner);
-        providerStates[account].providerStateTimeline[epoch].additionalReward += amount;
+        providerStates[account].providerStateTimeline[epoch].additionalRewardPerDayPerToken = amount;
     }
 
     function addToWhitelist(address account) public {

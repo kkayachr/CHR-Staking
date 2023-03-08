@@ -122,10 +122,13 @@ contract ChromiaDelegation is TwoWeeksNoticeProvider {
                 } else if (activeDelegation.delegatedTo == address(0)) {
                     // If user is undelegated this epoch, skip it
                     continue;
-                } else {
-                    // TODO: Do we want time-based reward or epoch based reward?
-                    reward += uint128(activeRate * activeDelegation.balance * epochLength);
                 }
+                // TODO: Do we want time-based reward or epoch based reward?
+                reward += uint128(
+                    (activeRate + providerState.providerStateTimeline[i].additionalRewardPerDayPerToken) *
+                        activeDelegation.balance *
+                        epochLength
+                );
             }
 
             if (reward == 0) return 0;
