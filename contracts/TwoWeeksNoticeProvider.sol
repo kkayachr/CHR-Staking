@@ -9,14 +9,22 @@ pragma solidity ^0.8.17;
 import '@openzeppelin/contracts/token/ERC20/IERC20.sol';
 import 'hardhat/console.sol';
 
-struct ProviderStateChange {
+struct ProviderBalanceChange {
     uint128 balance;
-    uint128 additionalReward;
+    uint32 epoch;
+}
+
+struct TotalDelegationChanges {
     uint128 totalDelegations;
     uint128 delegationsIncrease;
     uint128 delegationsDecrease;
+    uint32 epoch;
     bool totalDelegationsSet;
-    bool balanceChanged;
+}
+
+struct AdditionalReward {
+    uint128 additionalReward;
+    uint32 epoch;
 }
 
 contract TwoWeeksNoticeProvider {
@@ -30,7 +38,9 @@ contract TwoWeeksNoticeProvider {
         uint64 balance;
         uint32 claimedEpochReward;
         bool whitelisted;
-        mapping(uint32 => ProviderStateChange) providerStateTimeline;
+        ProviderBalanceChange[] balanceTimeline;
+        TotalDelegationChanges[] totalDelegationsTimeline;
+        AdditionalReward[] additionalRewardTimeline;
     }
 
     event StakeUpdate(address indexed from, uint64 balance);
@@ -124,9 +134,8 @@ contract TwoWeeksNoticeProvider {
         providerState.unlockPeriod = unlockPeriod;
         providerState.lockedUntil = 0;
         providerState.since = uint64(block.timestamp);
-        ProviderStateChange memory nextStakeChange = providerState.providerStateTimeline[getCurrentEpoch() + 1];
-        nextStakeChange.balanceChanged = true;
-        nextStakeChange.balance = amount;
+
+        providerState.balanceTimeline.push(ProviderStateChange(amount, getCurrentEpoch() + 1));
         emit StakeUpdate(msg.sender, amount);
     }
 
@@ -150,9 +159,7 @@ contract TwoWeeksNoticeProvider {
         ss.lockedUntil = 0;
         ss.since = 0;
 
-        ProviderStateChange storage nextStakeChange = ss.providerStateTimeline[getCurrentEpoch() + 1];
-        nextStakeChange.balanceChanged = true;
-        nextStakeChange.balance = 0;
+        providerState.balanceTimeline.push(ProviderStateChange(0, getCurrentEpoch() + 1));
         require(token.transfer(to, balance), 'transfer unsuccessful');
         emit StakeUpdate(msg.sender, 0);
     }
@@ -238,7 +245,7 @@ contract TwoWeeksNoticeProvider {
 
     function grantAdditionalReward(address account, uint32 epoch, uint128 amount) public {
         require(msg.sender == owner);
-        providerStates[account].providerStateTimeline[epoch].additionalReward += amount;
+        providerStates[account].additionalRewardTimeline.push(AdditionalReward(amount, epoch));
     }
 
     function addToWhitelist(address account) public {
@@ -260,15 +267,12 @@ contract TwoWeeksNoticeProvider {
             providerState.lockedUntil = 0;
             providerState.since = 0;
 
-            ProviderStateChange storage nextStakeChange = providerState.providerStateTimeline[nextEpoch];
-            nextStakeChange.balanceChanged = true;
-            nextStakeChange.balance = 0;
+            providerState.balanceTimeline.push(ProviderBalanceChange(0, nextEpoch));
             require(token.transfer(account, balance), 'transfer unsuccessful');
             emit StakeUpdate(msg.sender, 0);
         }
 
-        providerState.providerStateTimeline[nextEpoch].totalDelegations = 0;
-        providerState.providerStateTimeline[nextEpoch].totalDelegationsSet = true;
+        providerState.totalDelegationsTimeline.push(TotalDelegationChanges(0, 0, 0, nextEpoch, true));
 
         // remove from whitelist
         providerState.whitelisted = false;
