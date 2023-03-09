@@ -49,8 +49,9 @@ contract ChromiaDelegation is TwoWeeksNoticeProvider {
         address _owner,
         uint64 initial_reward,
         uint64 initial_reward_provider,
-        uint64 initial_del_reward_provider
-    ) TwoWeeksNoticeProvider(_token, _owner, initial_reward_provider, initial_del_reward_provider) {
+        uint64 initial_del_reward_provider,
+        address _bank
+    ) TwoWeeksNoticeProvider(_token, _owner, initial_reward_provider, initial_del_reward_provider, _bank) {
         rewardPerDayPerTokenTimeline[0] = RewardPerDayPerTokenChange(initial_reward, true);
         rewardPerDayPerTokenTimelineChanges.push(0);
         twn = _twn;
@@ -155,7 +156,7 @@ contract ChromiaDelegation is TwoWeeksNoticeProvider {
         uint128 reward = estimateYield(account);
         if (reward > 0) {
             delegations[account].claimedEpoch = getCurrentEpoch() - 1;
-            token.transfer(account, reward);
+            token.transferFrom(bank, account, reward);
         }
     }
 

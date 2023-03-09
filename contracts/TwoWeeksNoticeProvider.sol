@@ -44,10 +44,18 @@ contract TwoWeeksNoticeProvider {
     uint internal startTime = block.timestamp;
     uint public epochLength = 1 weeks;
     IERC20 internal token;
+    address public bank;
 
-    constructor(IERC20 _token, address _owner, uint64 _rewardPerDayPerTokenProvider, uint64 _rewardPerDayPerTotalDelegation) {
+    constructor(
+        IERC20 _token,
+        address _owner,
+        uint64 _rewardPerDayPerTokenProvider,
+        uint64 _rewardPerDayPerTotalDelegation,
+        address _bank
+    ) {
         token = _token;
         owner = _owner;
+        bank = _bank;
         rewardPerDayPerTokenProvider = _rewardPerDayPerTokenProvider;
         rewardPerDayPerTotalDelegation = _rewardPerDayPerTotalDelegation;
     }
@@ -153,7 +161,7 @@ contract TwoWeeksNoticeProvider {
         ProviderStateChange storage nextStakeChange = ss.providerStateTimeline[getCurrentEpoch() + 1];
         nextStakeChange.balanceChanged = true;
         nextStakeChange.balance = 0;
-        require(token.transfer(to, balance), 'transfer unsuccessful');
+        require(token.transferFrom(bank, to, balance), 'transfer unsuccessful');
         emit StakeUpdate(msg.sender, 0);
     }
 
@@ -195,7 +203,7 @@ contract TwoWeeksNoticeProvider {
         require(reward > 0, 'reward is 0');
         (uint128 acc, ) = estimateAccumulated(msg.sender);
         providerStates[msg.sender].processed = acc;
-        token.transfer(msg.sender, reward);
+        token.transferFrom(bank, msg.sender, reward);
     }
 
     function estimateProviderDelegationReward() public returns (uint128 reward) {
@@ -229,7 +237,7 @@ contract TwoWeeksNoticeProvider {
         uint128 reward = estimateProviderDelegationReward();
         require(reward > 0, 'reward is 0');
         providerStates[msg.sender].claimedEpochReward = getCurrentEpoch() - 1;
-        token.transfer(msg.sender, reward);
+        token.transferFrom(bank, msg.sender, reward);
     }
 
     function claimAllProviderRewards() public {
@@ -239,7 +247,7 @@ contract TwoWeeksNoticeProvider {
         (uint128 acc, ) = estimateAccumulated(msg.sender);
         providerStates[msg.sender].processed = acc;
         providerStates[msg.sender].claimedEpochReward = getCurrentEpoch() - 1;
-        token.transfer(msg.sender, reward);
+        token.transferFrom(bank, msg.sender, reward);
     }
 
     function grantAdditionalReward(address account, uint32 epoch, uint128 amount) public {
@@ -269,7 +277,7 @@ contract TwoWeeksNoticeProvider {
             ProviderStateChange storage nextStakeChange = providerState.providerStateTimeline[nextEpoch];
             nextStakeChange.balanceChanged = true;
             nextStakeChange.balance = 0;
-            require(token.transfer(account, balance), 'transfer unsuccessful');
+            require(token.transferFrom(bank, account, balance), 'transfer unsuccessful');
             emit StakeUpdate(msg.sender, 0);
         }
 

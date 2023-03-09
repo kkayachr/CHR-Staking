@@ -32,12 +32,14 @@ describe("ChromiaDelegation", function () {
     await twoWeeksNotice.deployed();
 
     const ChromiaDelegation = await ethers.getContractFactory("ChromiaDelegation");
-    const chromiaDelegation = await ChromiaDelegation.deploy(erc20Mock.address, twoWeeksNotice.address, owner.address, 548, 548, 1);
+    const chromiaDelegation = await ChromiaDelegation.deploy(erc20Mock.address, twoWeeksNotice.address, owner.address, 548, 548, 1, randomAddresses[10].address);
     await chromiaDelegation.deployed();
 
 
     await erc20Mock.mint(randomAddresses[0].address, 20000000000);
     await erc20Mock.mint(chromiaDelegation.address, 10000000000);
+    await erc20Mock.mint(randomAddresses[10].address, 10000000000000);
+    await erc20Mock.connect(randomAddresses[10]).increaseAllowance(chromiaDelegation.address, 10000000000000);
     await erc20Mock.connect(randomAddresses[0]).increaseAllowance(twoWeeksNotice.address, 20000000000);
     await erc20Mock.increaseAllowance(chromiaDelegation.address, 20000000000);
     await twoWeeksNotice.connect(randomAddresses[0]).stake(10000000000, days(14));
