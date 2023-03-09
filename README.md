@@ -20,12 +20,30 @@
 
 ## 📝 Table of Contents
 
-- [About](#about)
-- [Getting Started](#getting_started)
-- [Deployment](#deployment)
-- [Usage](#usage)
-- [Built Using](#built_using)
-- [Authors](#authors)
+-   [📝 Table of Contents](#-table-of-contents)
+-   [🏁 About ](#-about-)
+-   [🏁 Getting Started ](#-getting-started-)
+    -   [Prerequisites](#prerequisites)
+-   [🔧 Running the tests ](#-running-the-tests-)
+-   [🎈 Usage ](#-usage-)
+-   [🚀 Deployment ](#-deployment-)
+-   [⛏️ Built Using ](#️-built-using-)
+-   [✍️ Authors ](#️-authors-)
+
+## 🏁 About <a name = "about"></a>
+
+Is designed to sit alongside an alread deployed TWN contract.
+
+Users **MUST** call syncronizeWithdrawal() after requesting a withdrawal on the existing TWN contract.
+
+Allows for three district types of yield to be claimed.
+
+| Name                           | Paid To   | Depends On                                                             | Function Call                                                 |
+| ------------------------------ | --------- | ---------------------------------------------------------------------- | ------------------------------------------------------------- |
+| Delegator Yield                | Delegator | Proportionate to staked days. Conditional on delegating to a provider. | `claimYield(account)`                                         |
+| Additional Delegator Reward    | Delegator | An extra percentage paid to delegators on a specified epoch.           | `claimProviderDelegationReward()` `claimAllProviderRewards()` |
+| Provider Yield                 | Provider  | Proportionate to the provider's staked days                            | `claimProviderYield()` `claimAllProviderRewards()`            |
+| Provider Delegated Stake Yield | Provider  | Proportionate to the staked days delegated to the provider             | `claimProviderDelegationReward()` `claimAllProviderRewards()` |
 
 ## 🏁 Getting Started <a name = "getting_started"></a>
 
@@ -33,12 +51,11 @@ These instructions will get you a copy of the project up and running on your loc
 
 ### Prerequisites
 
-Simply do an npm install in the root folder for the prerequisites 
+Simply do an npm install in the root folder for the prerequisites
 
 ```
 npm install
 ```
-
 
 ## 🔧 Running the tests <a name = "tests"></a>
 
@@ -51,14 +68,15 @@ npx hardhat test
 ## 🎈 Usage <a name="usage"></a>
 
 The smart contract is not yet available on a blockchain network.
+
 ## 🚀 Deployment <a name = "deployment"></a>
+
 To be written...
 
 ## ⛏️ Built Using <a name = "built_using"></a>
 
-- [Hardhat](https://hardhat.org/) - Blockchain Tooling
+-   [Hardhat](https://hardhat.org/) - Blockchain Tooling
 
 ## ✍️ Authors <a name = "authors"></a>
 
-- [@kkayam](https://github.com/kkayam)
-
+-   [@kkayam](https://github.com/kkayam)
