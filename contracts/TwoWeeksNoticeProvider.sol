@@ -19,6 +19,11 @@ struct ProviderStateChange {
     bool balanceChanged;
 }
 
+struct RateChange {
+    uint16 rate;
+    bool changed;
+}
+
 contract TwoWeeksNoticeProvider {
     struct ProviderState {
         uint128 accumulated; // token-days staked
@@ -28,9 +33,9 @@ contract TwoWeeksNoticeProvider {
         uint64 lockedUntil; // 0 if withdraw is not requested
         uint64 since;
         uint64 balance;
-        uint32 claimedEpochReward;
+        uint16 claimedEpochReward;
         bool whitelisted;
-        mapping(uint32 => ProviderStateChange) providerStateTimeline;
+        mapping(uint16 => ProviderStateChange) providerStateTimeline;
     }
 
     event StakeUpdate(address indexed from, uint64 balance);
@@ -38,8 +43,11 @@ contract TwoWeeksNoticeProvider {
 
     mapping(address => ProviderState) internal providerStates;
 
-    uint64 public rewardPerDayPerTokenProvider;
-    uint64 public rewardPerDayPerTotalDelegation;
+    mapping(uint16 => RateChange) public rewardPerDayPerTokenProviderTimeline;
+    uint16[] public rewardPerDayPerTokenProviderChanges;
+    mapping(uint16 => RateChange) public rewardPerDayPerTotalDelegationTimeline;
+    uint16[] public rewardPerDayPerTotalDelegationChanges;
+
     address public owner;
     uint internal startTime = block.timestamp;
     uint public epochLength = 1 weeks;
@@ -56,13 +64,17 @@ contract TwoWeeksNoticeProvider {
         token = _token;
         owner = _owner;
         bank = _bank;
-        rewardPerDayPerTokenProvider = _rewardPerDayPerTokenProvider;
-        rewardPerDayPerTotalDelegation = _rewardPerDayPerTotalDelegation;
+        rewardPerDayPerTokenProviderTimeline[0] = _rewardPerDayPerTokenProvider;
+        rewardPerDayPerTokenProviderChanges.push(0);
+        rewardPerDayPerTotalDelegationTimeline[0] = _rewardPerDayPerTotalDelegation;
+        rewardPerDayPerTotalDelegationChanges.push(0);
     }
 
     function setProviderRewardRate(uint64 rewardRate) external {
         require(msg.sender == owner);
-        rewardPerDayPerTokenProvider = rewardRate;
+        uint16 nextEpoch = getCurrentEpoch() + 1;
+        rewardPerDayPerTokenProviderTimeline[nextEpoch] = rewardRate;
+        rewardPerDayPerTokenProviderChanges.push(nextEpoch);
     }
 
     function getProviderStakeState(address account) external view returns (uint64, uint64, uint64, uint64, uint128) {
@@ -165,10 +177,10 @@ contract TwoWeeksNoticeProvider {
         emit StakeUpdate(msg.sender, 0);
     }
 
-    function calculateTotalDelegation(uint32 epoch, address account) public view returns (uint128 latestTotalDelegations) {
+    function calculateTotalDelegation(uint16 epoch, address account) public view returns (uint128 latestTotalDelegations) {
         ProviderStateChange memory stakeChange;
-        uint32 latestTotalDelegationsEpoch;
-        for (uint32 i = epoch; i >= 0; i--) {
+        uint16 latestTotalDelegationsEpoch;
+        for (uint16 i = epoch; i >= 0; i--) {
             stakeChange = providerStates[account].providerStateTimeline[i];
             if (stakeChange.balanceChanged && stakeChange.balance == 0) {
                 latestTotalDelegations = 0;
@@ -182,19 +194,63 @@ contract TwoWeeksNoticeProvider {
             }
             if (i == 0) break;
         }
-        for (uint32 i = latestTotalDelegationsEpoch + 1; i <= epoch; i++) {
+        for (uint16 i = latestTotalDelegationsEpoch + 1; i <= epoch; i++) {
             stakeChange = providerStates[account].providerStateTimeline[i];
             latestTotalDelegations = latestTotalDelegations + stakeChange.delegationsIncrease - stakeChange.delegationsDecrease;
         }
         return latestTotalDelegations;
     }
 
+    // function estimateProviderYield(address account) public view returns (uint128 reward) {
+    //     uint128 prevPaid = providerStates[msg.sender].processed;
+    //     (uint128 acc, ) = estimateAccumulated(account);
+    //     if (acc > prevPaid) {
+    //         uint128 delta = acc - prevPaid;
+    //         reward = (rewardPerDayPerTokenProvider * delta) / 1000000;
+    //     }
+    // }
+
     function estimateProviderYield(address account) public view returns (uint128 reward) {
-        uint128 prevPaid = providerStates[msg.sender].processed;
-        (uint128 acc, ) = estimateAccumulated(account);
-        if (acc > prevPaid) {
-            uint128 delta = acc - prevPaid;
-            reward = (rewardPerDayPerTokenProvider * delta) / 1000000;
+        DelegationState storage userState = delegations[account];
+        uint16 processedEpoch = userState.claimedEpoch;
+        uint16 currentEpoch = getCurrentEpoch();
+
+        if (currentEpoch - 1 > processedEpoch) {
+            verifyStake(account); // verify that TWN > ChromiaDelegation
+
+            uint128 activeRate = getActiveRate(processedEpoch + 1);
+            DelegationChange memory activeDelegation = getActiveDelegation(account, processedEpoch + 1);
+            ProviderState storage providerState = providerStates[activeDelegation.delegatedTo];
+            // TODO: get active provider stake from its timeline - is provider even staked?
+
+            for (uint16 i = processedEpoch + 1; i < currentEpoch; i++) {
+                // Check if rate changes this epoch
+                activeRate = rewardPerDayPerTokenTimeline[i].changed
+                    ? rewardPerDayPerTokenTimeline[i].rewardPerDayPerToken
+                    : activeRate;
+
+                // Check if users delegation changes this epoch
+                activeDelegation = userState.delegationTimeline[i].changed ? userState.delegationTimeline[i] : activeDelegation;
+
+                if (
+                    providerState.providerStateTimeline[i].balanceChanged && providerState.providerStateTimeline[i].balance == 0
+                ) {
+                    // if provider withdrew, stop counting reward
+                    break;
+                } else if (activeDelegation.delegatedTo == address(0)) {
+                    // If user is undelegated this epoch, skip it
+                    continue;
+                }
+                // TODO: Do we want time-based reward or epoch based reward?
+                reward += uint128(
+                    (activeRate + providerState.providerStateTimeline[i].additionalRewardPerDayPerToken) *
+                        activeDelegation.balance *
+                        epochLength
+                );
+            }
+
+            if (reward == 0) return 0;
+            reward /= 1000000 * 86400;
         }
     }
 
@@ -208,13 +264,13 @@ contract TwoWeeksNoticeProvider {
 
     function estimateProviderDelegationReward() public returns (uint128 reward) {
         ProviderState storage providerState = providerStates[msg.sender];
-        uint32 claimedEpochReward = providerState.claimedEpochReward;
-        uint32 currentEpoch = getCurrentEpoch();
+        uint16 claimedEpochReward = providerState.claimedEpochReward;
+        uint16 currentEpoch = getCurrentEpoch();
 
         if (currentEpoch - 1 > claimedEpochReward) {
             uint128 totalDelegations = calculateTotalDelegation(claimedEpochReward, msg.sender);
             uint128 prevTotalDelegations = totalDelegations;
-            for (uint32 i = claimedEpochReward + 1; i < currentEpoch; i++) {
+            for (uint16 i = claimedEpochReward + 1; i < currentEpoch; i++) {
                 ProviderStateChange storage psc = providerState.providerStateTimeline[i];
                 totalDelegations += psc.delegationsIncrease - psc.delegationsDecrease;
 
@@ -250,7 +306,7 @@ contract TwoWeeksNoticeProvider {
         token.transferFrom(bank, msg.sender, reward);
     }
 
-    function grantAdditionalReward(address account, uint32 epoch, uint128 amount) public {
+    function grantAdditionalReward(address account, uint16 epoch, uint128 amount) public {
         require(msg.sender == owner);
         providerStates[account].providerStateTimeline[epoch].additionalRewardPerDayPerToken = amount;
     }
@@ -263,7 +319,7 @@ contract TwoWeeksNoticeProvider {
     function removeFromWhitelist(address account) public {
         require(msg.sender == owner);
         ProviderState storage providerState = providerStates[account];
-        uint32 nextEpoch = getCurrentEpoch() + 1;
+        uint16 nextEpoch = getCurrentEpoch() + 1;
 
         // withdraw for provider
         if (providerState.balance > 0) {
@@ -288,16 +344,16 @@ contract TwoWeeksNoticeProvider {
         providerState.whitelisted = false;
     }
 
-    function getCurrentEpoch() public view returns (uint32) {
+    function getCurrentEpoch() public view returns (uint16) {
         return getEpoch(block.timestamp);
     }
 
-    function getEpoch(uint time) public view returns (uint32) {
+    function getEpoch(uint time) public view returns (uint16) {
         require(time > startTime, 'Time must be larger than starttime');
-        return uint32((time - startTime) / epochLength);
+        return uint16((time - startTime) / epochLength);
     }
 
-    function getEpochTime(uint32 epoch) public view returns (uint128) {
-        return uint32(startTime + epoch * epochLength);
+    function getEpochTime(uint16 epoch) public view returns (uint128) {
+        return uint16(startTime + epoch * epochLength);
     }
 }
