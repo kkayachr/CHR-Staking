@@ -359,8 +359,4 @@ contract ProviderStaking {
         require(time > startTime, 'Time must be larger than starttime');
         return uint16((time - startTime) / epochLength);
     }
-
-    function getEpochTime(uint16 epoch) public view returns (uint128) {
-        return uint16(startTime + epoch * epochLength);
-    }
 }
