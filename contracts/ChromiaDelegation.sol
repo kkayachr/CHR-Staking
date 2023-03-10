@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: MIT
 
 /*
-    This contract has three parts: Delegation, Yield and TwoWeeksNoticeProvider.
+    This contract has three parts: Delegation, Yield and ProviderStaking.
 */
 
 pragma solidity ^0.8.17;
 
 import '@openzeppelin/contracts/token/ERC20/IERC20.sol';
-import './TwoWeeksNoticeProvider.sol';
+import './ProviderStaking.sol';
 import 'hardhat/console.sol';
 
 interface TwoWeeksNotice {
@@ -16,7 +16,7 @@ interface TwoWeeksNotice {
     function getStakeState(address account) external view returns (uint64, uint64, uint64, uint64);
 }
 
-contract ChromiaDelegation is TwoWeeksNoticeProvider {
+contract ChromiaDelegation is ProviderStaking {
     struct DelegationChange {
         uint128 balance;
         address delegatedTo;
@@ -33,8 +33,7 @@ contract ChromiaDelegation is TwoWeeksNoticeProvider {
     }
 
     mapping(address => DelegationState) public delegations;
-    mapping(uint16 => RateChange) public rewardPerDayPerTokenTimeline;
-    uint16[] rewardPerDayPerTokenTimelineChanges;
+    RateTimeline delegatorYieldTimeline;
 
     TwoWeeksNotice public twn;
 
@@ -46,9 +45,9 @@ contract ChromiaDelegation is TwoWeeksNoticeProvider {
         uint16 initial_reward_provider,
         uint16 initial_del_reward_provider,
         address _bank
-    ) TwoWeeksNoticeProvider(_token, _owner, initial_reward_provider, initial_del_reward_provider, _bank) {
-        rewardPerDayPerTokenTimeline[0] = RateChange(initial_reward, true);
-        rewardPerDayPerTokenTimelineChanges.push(0);
+    ) ProviderStaking(_token, _owner, initial_reward_provider, initial_del_reward_provider, _bank) {
+        delegatorYieldTimeline.timeline[0] = RateChange(initial_reward, true);
+        delegatorYieldTimeline.changes.push(0);
         twn = _twn;
     }
 
@@ -64,8 +63,8 @@ contract ChromiaDelegation is TwoWeeksNoticeProvider {
     function setRewardRate(uint16 rewardRate) external {
         require(msg.sender == owner);
         uint16 nextEpoch = getCurrentEpoch() + 1;
-        rewardPerDayPerTokenTimeline[nextEpoch] = RateChange(rewardRate, true);
-        rewardPerDayPerTokenTimelineChanges.push(nextEpoch);
+        delegatorYieldTimeline.timeline[nextEpoch] = RateChange(rewardRate, true);
+        delegatorYieldTimeline.changes.push(nextEpoch);
     }
 
     function getActiveDelegation(address account, uint16 epoch) public view returns (DelegationChange memory activeDelegation) {
@@ -81,9 +80,9 @@ contract ChromiaDelegation is TwoWeeksNoticeProvider {
     }
 
     function getActiveRate(uint16 epoch) public view returns (uint128 activeRate) {
-        for (uint i = rewardPerDayPerTokenTimelineChanges.length - 1; i >= 0; i--) {
-            if (rewardPerDayPerTokenTimelineChanges[i] <= epoch) {
-                return rewardPerDayPerTokenTimeline[rewardPerDayPerTokenTimelineChanges[i]].rate;
+        for (uint i = delegatorYieldTimeline.changes.length - 1; i >= 0; i--) {
+            if (delegatorYieldTimeline.changes[i] <= epoch) {
+                return delegatorYieldTimeline.timeline[delegatorYieldTimeline.changes[i]].rate;
             }
             if (i == 0) break;
         }
@@ -104,7 +103,7 @@ contract ChromiaDelegation is TwoWeeksNoticeProvider {
 
             for (uint16 i = processedEpoch + 1; i < currentEpoch; i++) {
                 // Check if rate changes this epoch
-                activeRate = rewardPerDayPerTokenTimeline[i].changed ? rewardPerDayPerTokenTimeline[i].rate : activeRate;
+                activeRate = delegatorYieldTimeline.timeline[i].changed ? delegatorYieldTimeline.timeline[i].rate : activeRate;
 
                 // Check if users delegation changes this epoch
                 activeDelegation = userState.delegationTimeline[i].changed ? userState.delegationTimeline[i] : activeDelegation;

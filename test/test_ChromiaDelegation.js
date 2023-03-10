@@ -314,9 +314,9 @@ describe("ChromiaDelegation", function () {
 
       let totalDelegation = await chromiaDelegation.calculateTotalDelegation(await chromiaDelegation.getCurrentEpoch(), owner.address);
       var expectedReward = await calcExpectedReward(totalDelegation, 5, 1);
+      let estimatedYield = await calcExpectedReward(10000000000, 57, 548); // 52 weeks from fixture plus 5 weeks now
 
       await chromiaDelegation.removeFromWhitelist(owner.address);
-      let estimatedYield = await chromiaDelegation.estimateProviderYield(owner.address);
       await time.increase(weeks(10));
 
       preBalance = await erc20Mock.balanceOf(owner.address);
@@ -325,7 +325,7 @@ describe("ChromiaDelegation", function () {
       postBalance = await erc20Mock.balanceOf(owner.address);
 
       // // Provider has received fee
-      await expect(postBalance - preBalance).to.eq(expectedReward + estimatedYield.toNumber());
+      await expect(postBalance - preBalance).to.eq(expectedReward + estimatedYield);
     }).timeout(10000);
   });
 
