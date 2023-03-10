@@ -1,10 +1,13 @@
 node_modules
 .env
-coverage
-coverage.json
 
 #Hardhat files
 cache
 artifacts
 .vscode/settings.json
 .DS_Store
+
+#Tests
+test-reports
+coverage
+coverage.json
