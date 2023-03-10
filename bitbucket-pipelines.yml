@@ -14,4 +14,4 @@ pipelines:
           artifacts:
             - coverage
             - coverage.json
-            - artefacts
+            - artifacts
