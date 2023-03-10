@@ -245,8 +245,6 @@ describe("ChromiaDelegation", function () {
       let totalDelegation = await chromiaDelegation.calculateTotalDelegation(await chromiaDelegation.getCurrentEpoch(), owner.address);
       var expectedReward = await calcExpectedReward(totalDelegation, 4, 1);
 
-      console.log(expectedReward);
-
       preBalance = await erc20Mock.balanceOf(owner.address);
       // Claim provider delegation reward
       await chromiaDelegation.claimProviderDelegationReward();

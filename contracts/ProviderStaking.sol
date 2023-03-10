@@ -100,6 +100,7 @@ contract ProviderStaking {
         return getActiveRate(epoch, providerRewardRateTimeline);
     }
 
+    // BUG: POTENTIAL PROBLEM: what if rateTimeline.changes is not in chronological order? Maybe need to loop through the whole array to make sure
     function getActiveRate(uint16 epoch, RateTimeline storage rateTimeline) internal view returns (uint128 activeRate) {
         for (uint i = rateTimeline.changes.length - 1; i >= 0; i--) {
             if (rateTimeline.changes[i] <= epoch) {
