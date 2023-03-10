@@ -40,6 +40,10 @@ struct ProviderState {
     uint16[] providerStateTimelineChanges;
 }
 
+/// @title Staking Contract for Chromia Providers
+/// @author Koray Kaya based on the generic contract by Alex Mizrahi
+/// @notice Locks CHR tokens for  period. Calculates token/days accumulated. Distribution of epoch-based rewards.
+/// @dev Despite the name, the lock period is not fixed.
 contract ProviderStaking {
     event StakeUpdate(address indexed from, uint64 balance);
     event WithdrawRequest(address indexed from, uint64 until);
@@ -120,6 +124,11 @@ contract ProviderStaking {
         return (providerState.balance, providerState.unlockPeriod, providerState.lockedUntil);
     }
 
+    /// @notice Sets caller's stake to `amount`, locked for `unlockPeriod` seconds.
+    /// @param amount Stake size in minor tokens. Must be higher than any existing stake.
+    /// @param unlockPeriod Given in seconds. Must be greater than 2 weeks.
+    /// @dev Will pull tokens and therefore requires approval.
+    /// @dev Updates the accumulated tokens.
     function stakeProvider(uint64 amount, uint64 unlockPeriod) external {
         ProviderState storage providerState = providerStates[msg.sender];
 
@@ -146,12 +155,15 @@ contract ProviderStaking {
         emit StakeUpdate(msg.sender, amount);
     }
 
+    /// @notice Initiates a withdrawal of the calling provider's stake.
+    /// @dev Updates the accumulated tokens.
     function requestWithdrawProvider() external {
         ProviderState storage providerState = providerStates[msg.sender];
         require(providerState.balance > 0);
         providerState.lockedUntil = uint64(block.timestamp + providerState.unlockPeriod);
     }
 
+    /// @notice Withdraws the stake of the calling provider. Requires a previous call to `requestWithdrawProvider()`.
     function withdrawProvider(address to) external {
         ProviderState storage providerState = providerStates[msg.sender];
         require(providerState.balance > 0, 'must have tokens to withdraw');
@@ -172,6 +184,8 @@ contract ProviderStaking {
         emit StakeUpdate(msg.sender, 0);
     }
 
+    /// @notice Calculates the total stake for the provider `account` at epoch `epoch`
+    /// @return latestTotalDelegations The stake active during that epoch
     function calculateTotalDelegation(uint16 epoch, address account) public view returns (uint128 latestTotalDelegations) {
         ProviderStateChange memory stakeChange;
         uint16 latestTotalDelegationsEpoch;
@@ -217,6 +231,7 @@ contract ProviderStaking {
      *
      */
 
+    /// @notice Token yield reward (minor units) claimable now by provider `account`
     function estimateProviderYield(address account) public view returns (uint128 reward) {
         ProviderState storage providerState = providerStates[account];
         uint16 claimedEpochReward = providerState.claimedEpochYield;
@@ -245,6 +260,7 @@ contract ProviderStaking {
         }
     }
 
+    /// @notice Claims token rewards from yield for provider `account`
     function claimProviderYield() public {
         uint128 reward = estimateProviderYield(msg.sender);
         require(reward > 0, 'reward is 0');
@@ -252,6 +268,7 @@ contract ProviderStaking {
         token.transferFrom(bank, msg.sender, reward);
     }
 
+    /// @notice Estimates the per epoch provider yield and additional rewards for `account`
     function estimateProviderDelegationReward() public returns (uint128 reward) {
         ProviderState storage providerState = providerStates[msg.sender];
         uint16 claimedEpochReward = providerState.claimedEpochReward;
@@ -286,6 +303,7 @@ contract ProviderStaking {
         }
     }
 
+    /// @notice Claims additional token rewards for the calling provider
     function claimProviderDelegationReward() public {
         uint128 reward = estimateProviderDelegationReward();
         require(reward > 0, 'reward is 0');
@@ -293,6 +311,7 @@ contract ProviderStaking {
         token.transferFrom(bank, msg.sender, reward);
     }
 
+    /// @notice Claims both the provider yield and the additional token rewards for the calling provider
     function claimAllProviderRewards() public {
         uint128 reward = estimateProviderDelegationReward();
         reward += estimateProviderYield(msg.sender);
@@ -308,17 +327,20 @@ contract ProviderStaking {
      *
      */
 
+    /// @notice Grants a lump `amount` award to a provider `account` at epoch `epoch`
     function grantAdditionalReward(address account, uint16 epoch, uint128 amount) public {
         require(msg.sender == owner);
         providerStates[account].providerStateTimeline[epoch].additionalRewardPerDayPerToken = amount;
     }
 
+    /// @notice Adds `account` as a valid provider on the whitelist
     function addToWhitelist(address account) public {
         require(msg.sender == owner);
         providerStates[account].whitelisted = true;
     }
 
     // TODO: Polish this function, make sure it works correctly
+    /// @notice Removes `account` from the provider whitelist, and process an immediate withdrawal if successful
     function removeFromWhitelist(address account) public {
         require(msg.sender == owner);
         ProviderState storage providerState = providerStates[account];

@@ -32,6 +32,11 @@ struct DelegationState {
     uint16[] delegationTimelineChanges;
 }
 
+/// @title ChromiaProvider Delegation
+/// @author Koray Kaya
+/// @notice TwoWeekNoticeProvider extension that allows delegation rewards for an existing TwoWeekNotice contract.
+/// @dev Syncronizes state with the TWN contract when delegation is altered.
+/// @dev Syncronization must also be performed after a TWN withdrawal
 contract ChromiaDelegation is ProviderStaking {
     mapping(address => DelegationState) public delegatorStates;
     RateTimeline delegatorYieldTimeline;
@@ -54,6 +59,7 @@ contract ChromiaDelegation is ProviderStaking {
         twn = _twn;
     }
 
+    /// @dev Ensure the delegator's stake on the TWN contract has not been released.
     function verifyStake(address account) internal view {
         (, uint128 remoteAccumulated) = twn.estimateAccumulated(account);
 
@@ -66,14 +72,12 @@ contract ChromiaDelegation is ProviderStaking {
         );
     }
 
+    /// @notice Set the reward rate to `rewardRate` for the *next* epoch
     function setRewardRate(uint16 newRate) external {
         setNewRate(newRate, delegatorYieldTimeline);
     }
 
-    function getActiveRate(uint16 epoch) public view returns (uint128 activeRate) {
-        return getActiveRate(epoch, delegatorYieldTimeline);
-    }
-
+    /// @notice Get the active delegates state for `account` at epoch `epoch`
     function getActiveDelegation(address account, uint16 epoch) public view returns (DelegationChange memory activeDelegation) {
         DelegationState storage userState = delegatorStates[account];
         if (userState.delegationTimelineChanges.length > 0) {
@@ -87,7 +91,12 @@ contract ChromiaDelegation is ProviderStaking {
     }
 
     // TODO: add reset function that completely resets all rewards and everything in case user messes up the sync
+    /// @notice Get the reward rate active at epoch `epoch`
+    function getActiveRate(uint16 epoch) public view returns (uint128 activeRate) {
+        return getActiveRate(epoch, delegatorYieldTimeline);
+    }
 
+    /// @notice Calculate the total accumulated reward available to `account`
     function estimateYield(address account) public view returns (uint128 reward) {
         DelegationState storage userState = delegatorStates[account];
         uint16 processedEpoch = userState.claimedEpoch;
@@ -130,6 +139,7 @@ contract ChromiaDelegation is ProviderStaking {
         }
     }
 
+    /// @notice Informs the reward contract of a withdrawal on TWN. Failure to do so may result in lost.
     function syncWithdrawRequest() external {
         (, , uint64 lockedUntil, ) = twn.getStakeState(msg.sender);
         require(lockedUntil > 0, 'Withdraw has not been requested');
@@ -144,6 +154,7 @@ contract ChromiaDelegation is ProviderStaking {
         userState.delegationTimelineChanges.push(lockedUntilEpoch - 2);
     }
 
+    /// @notice Claims the rewards (which should be per `estimateYield(account)`) for `account`
     function claimYield(address account) public {
         require(delegatorStates[account].processedDate > 0, 'Address must make a first delegation.');
         uint128 reward = estimateYield(account);
@@ -153,6 +164,7 @@ contract ChromiaDelegation is ProviderStaking {
         }
     }
 
+    /// @notice Set the delegation of the caller for the *next* epoch
     function delegate(address to) public {
         DelegationState storage userState = delegatorStates[msg.sender];
         (, uint128 acc) = twn.estimateAccumulated(msg.sender);
@@ -196,6 +208,7 @@ contract ChromiaDelegation is ProviderStaking {
         }
     }
 
+    /// @notice Removes the delegation of the caller for the *next* epoch *if* they are not withdrawing
     function undelegate() public {
         (, , uint64 lockedUntil, ) = twn.getStakeState(msg.sender);
         require(lockedUntil == 0, 'Cannot change delegation while withdrawing');
@@ -206,6 +219,7 @@ contract ChromiaDelegation is ProviderStaking {
         userState.delegationTimelineChanges.push(currentEpoch + 1);
     }
 
+    /// @notice Sends all CHR tokens to the contract owner. Only the owner can call.
     function drain() external {
         require(msg.sender == owner);
         token.transfer(owner, token.balanceOf(address(this)));

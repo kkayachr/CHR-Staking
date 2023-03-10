@@ -20,30 +20,31 @@
 
 ## 📝 Table of Contents
 
--   [📝 Table of Contents](#-table-of-contents)
--   [🏁 About ](#-about-)
--   [🏁 Getting Started ](#-getting-started-)
-    -   [Prerequisites](#prerequisites)
--   [🔧 Running the tests ](#-running-the-tests-)
--   [🎈 Usage ](#-usage-)
--   [🚀 Deployment ](#-deployment-)
--   [⛏️ Built Using ](#️-built-using-)
--   [✍️ Authors ](#️-authors-)
+- [📝 Table of Contents](#-table-of-contents)
+- [🏁 About ](#-about-)
+- [🏁 Getting Started ](#-getting-started-)
+  - [Prerequisites](#prerequisites)
+- [🔧 Running the tests ](#-running-the-tests-)
+- [🎈 Usage ](#-usage-)
+- [🚀 Deployment ](#-deployment-)
+- [⛏️ Built Using ](#️-built-using-)
+- [✍️ Authors ](#️-authors-)
 
 ## 🏁 About <a name = "about"></a>
 
-Is designed to sit alongside an alread deployed TWN contract.
+Is designed to sit alongside an already deployed TWN contract.
 
-Users **MUST** call syncronizeWithdrawal() after requesting a withdrawal on the existing TWN contract.
+Users **MUST** call `syncWithdrawRequest()` after requesting a withdrawal on the existing TWN contract.
 
-Allows for three district types of yield to be claimed.
+Allows for four district types of yield to be claimed.
 
-| Name                           | Paid To   | Depends On                                                             | Function Call                                                 |
-| ------------------------------ | --------- | ---------------------------------------------------------------------- | ------------------------------------------------------------- |
-| Delegator Yield                | Delegator | Proportionate to staked days. Conditional on delegating to a provider. | `claimYield(account)`                                         |
-| Additional Delegator Reward    | Delegator | An extra percentage paid to delegators on a specified epoch.           | `claimProviderDelegationReward()` `claimAllProviderRewards()` |
-| Provider Yield                 | Provider  | Proportionate to the provider's staked days                            | `claimProviderYield()` `claimAllProviderRewards()`            |
-| Provider Delegated Stake Yield | Provider  | Proportionate to the staked days delegated to the provider             | `claimProviderDelegationReward()` `claimAllProviderRewards()` |
+Name  | Paid To | Depends On | Function Call
+------------- | ------------- | ------------- | -------------
+Delegator Yield | Delegator | Proportionate to staked days. Conditional on delegating to a provider. | `claimYield(account)`
+Provider Yield | Provider | Proportionate to the provider's staked days | `claimProviderYield()` `claimAllProviderRewards()`
+Provider Delegated Stake Yield | Provider  | Proportionate to the staked days delegated to the provider | `claimProviderDelegationReward()` `claimAllProviderRewards()`
+Additional Provider Reward | Provider | Lump amount paid to a provider for a particular epoch. | `claimProviderDelegationReward()` `claimAllProviderRewards()`
+
 
 ## 🏁 Getting Started <a name = "getting_started"></a>
 
