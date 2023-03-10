@@ -42,12 +42,12 @@ contract ChromiaDelegation is TwoWeeksNoticeProvider {
         IERC20 _token,
         TwoWeeksNotice _twn,
         address _owner,
-        uint64 initial_reward,
-        uint64 initial_reward_provider,
-        uint64 initial_del_reward_provider,
+        uint16 initial_reward,
+        uint16 initial_reward_provider,
+        uint16 initial_del_reward_provider,
         address _bank
     ) TwoWeeksNoticeProvider(_token, _owner, initial_reward_provider, initial_del_reward_provider, _bank) {
-        rewardPerDayPerTokenTimeline[0] = RewardPerDayPerTokenChange(initial_reward, true);
+        rewardPerDayPerTokenTimeline[0] = RateChange(initial_reward, true);
         rewardPerDayPerTokenTimelineChanges.push(0);
         twn = _twn;
     }
@@ -61,10 +61,10 @@ contract ChromiaDelegation is TwoWeeksNoticeProvider {
         require(remoteAccumulated >= (localAccumulated + delegations[account].processed), 'Accumulated doesnt match with TWN');
     }
 
-    function setRewardRate(uint64 rewardRate) external {
+    function setRewardRate(uint16 rewardRate) external {
         require(msg.sender == owner);
         uint16 nextEpoch = getCurrentEpoch() + 1;
-        rewardPerDayPerTokenTimeline[nextEpoch] = RewardPerDayPerTokenChange(rewardRate, true);
+        rewardPerDayPerTokenTimeline[nextEpoch] = RateChange(rewardRate, true);
         rewardPerDayPerTokenTimelineChanges.push(nextEpoch);
     }
 
@@ -83,7 +83,7 @@ contract ChromiaDelegation is TwoWeeksNoticeProvider {
     function getActiveRate(uint16 epoch) public view returns (uint128 activeRate) {
         for (uint i = rewardPerDayPerTokenTimelineChanges.length - 1; i >= 0; i--) {
             if (rewardPerDayPerTokenTimelineChanges[i] <= epoch) {
-                return rewardPerDayPerTokenTimeline[rewardPerDayPerTokenTimelineChanges[i]].rewardPerDayPerToken;
+                return rewardPerDayPerTokenTimeline[rewardPerDayPerTokenTimelineChanges[i]].rate;
             }
             if (i == 0) break;
         }
@@ -104,9 +104,7 @@ contract ChromiaDelegation is TwoWeeksNoticeProvider {
 
             for (uint16 i = processedEpoch + 1; i < currentEpoch; i++) {
                 // Check if rate changes this epoch
-                activeRate = rewardPerDayPerTokenTimeline[i].changed
-                    ? rewardPerDayPerTokenTimeline[i].rewardPerDayPerToken
-                    : activeRate;
+                activeRate = rewardPerDayPerTokenTimeline[i].changed ? rewardPerDayPerTokenTimeline[i].rate : activeRate;
 
                 // Check if users delegation changes this epoch
                 activeDelegation = userState.delegationTimeline[i].changed ? userState.delegationTimeline[i] : activeDelegation;
