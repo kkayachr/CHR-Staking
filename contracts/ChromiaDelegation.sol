@@ -60,11 +60,12 @@ contract ChromiaDelegation is ProviderStaking {
         require(remoteAccumulated >= (localAccumulated + delegations[account].processed), 'Accumulated doesnt match with TWN');
     }
 
-    function setRewardRate(uint16 rewardRate) external {
-        require(msg.sender == owner);
-        uint16 nextEpoch = getCurrentEpoch() + 1;
-        delegatorYieldTimeline.timeline[nextEpoch] = RateChange(rewardRate, true);
-        delegatorYieldTimeline.changes.push(nextEpoch);
+    function setRewardRate(uint16 newRate) external {
+        setNewRate(newRate, delegatorYieldTimeline);
+    }
+
+    function getActiveRate(uint16 epoch) public view returns (uint128 activeRate) {
+        return getActiveRate(epoch, delegatorYieldTimeline);
     }
 
     function getActiveDelegation(address account, uint16 epoch) public view returns (DelegationChange memory activeDelegation) {
@@ -76,15 +77,6 @@ contract ChromiaDelegation is ProviderStaking {
                 }
                 if (i == 0) break;
             }
-        }
-    }
-
-    function getActiveRate(uint16 epoch) public view returns (uint128 activeRate) {
-        for (uint i = delegatorYieldTimeline.changes.length - 1; i >= 0; i--) {
-            if (delegatorYieldTimeline.changes[i] <= epoch) {
-                return delegatorYieldTimeline.timeline[delegatorYieldTimeline.changes[i]].rate;
-            }
-            if (i == 0) break;
         }
     }
 

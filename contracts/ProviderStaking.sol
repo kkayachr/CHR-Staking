@@ -29,25 +29,25 @@ struct RateTimeline {
     uint16[] changes;
 }
 
-contract ProviderStaking {
-    struct ProviderState {
-        uint64 unlockPeriod; // time it takes from requesting withdraw to being able to withdraw
-        uint64 lockedUntil; // 0 if withdraw is not requested
-        uint64 balance;
-        uint16 claimedEpochReward;
-        uint16 claimedEpochYield;
-        bool whitelisted;
-        mapping(uint16 => ProviderStateChange) providerStateTimeline;
-        uint16[] providerStateTimelineChanges;
-    }
+struct ProviderState {
+    uint64 unlockPeriod; // time it takes from requesting withdraw to being able to withdraw
+    uint64 lockedUntil; // 0 if withdraw is not requested
+    uint64 balance;
+    uint16 claimedEpochReward;
+    uint16 claimedEpochYield;
+    bool whitelisted;
+    mapping(uint16 => ProviderStateChange) providerStateTimeline;
+    uint16[] providerStateTimelineChanges;
+}
 
+contract ProviderStaking {
     event StakeUpdate(address indexed from, uint64 balance);
     event WithdrawRequest(address indexed from, uint64 until);
 
     mapping(address => ProviderState) internal providerStates;
 
-    RateTimeline providerYieldRateTimeline;
-    RateTimeline providerRewardRateTimeline;
+    RateTimeline providerYieldRateTimeline; // The regular yield a provider gets on their own stake
+    RateTimeline providerRewardRateTimeline; // The reward the provider gets from the delegations that are delegated to them
 
     address public owner;
     uint internal startTime = block.timestamp;
@@ -71,13 +71,49 @@ contract ProviderStaking {
         providerRewardRateTimeline.changes.push(0);
     }
 
-    function setProviderRewardRate(uint16 rewardRate) external {
-        require(msg.sender == owner);
-        uint16 nextEpoch = getCurrentEpoch() + 1;
-        providerYieldRateTimeline.timeline[nextEpoch] = RateChange(rewardRate, true);
-        providerYieldRateTimeline.changes.push(nextEpoch);
+    /**
+     *
+     * SET AND GET RATES
+     *
+     */
+
+    function setProviderYieldRate(uint16 newRate) external {
+        setNewRate(newRate, providerYieldRateTimeline);
     }
 
+    function setProviderRewardRate(uint16 newRate) external {
+        setNewRate(newRate, providerRewardRateTimeline);
+    }
+
+    function setNewRate(uint16 newRate, RateTimeline storage rateTimeline) internal {
+        require(msg.sender == owner);
+        uint16 nextEpoch = getCurrentEpoch() + 1;
+        rateTimeline.timeline[nextEpoch] = RateChange(newRate, true);
+        rateTimeline.changes.push(nextEpoch);
+    }
+
+    function getActiveProviderYieldRate(uint16 epoch) public view returns (uint128 activeRate) {
+        return getActiveRate(epoch, providerYieldRateTimeline);
+    }
+
+    function getActiveProviderRewardRate(uint16 epoch) public view returns (uint128 activeRate) {
+        return getActiveRate(epoch, providerRewardRateTimeline);
+    }
+
+    function getActiveRate(uint16 epoch, RateTimeline storage rateTimeline) internal view returns (uint128 activeRate) {
+        for (uint i = rateTimeline.changes.length - 1; i >= 0; i--) {
+            if (rateTimeline.changes[i] <= epoch) {
+                return rateTimeline.timeline[rateTimeline.changes[i]].rate;
+            }
+            if (i == 0) break;
+        }
+    }
+
+    /**
+     *
+     * PROVIDER STATE
+     *
+     */
     function getProviderStakeState(address account) external view returns (uint64, uint64, uint64) {
         ProviderState storage providerState = providerStates[account];
         return (providerState.balance, providerState.unlockPeriod, providerState.lockedUntil);
@@ -159,24 +195,6 @@ contract ProviderStaking {
         return latestTotalDelegations;
     }
 
-    function getActiveProviderYieldRate(uint16 epoch) public view returns (uint128 activeRate) {
-        for (uint i = providerYieldRateTimeline.changes.length - 1; i >= 0; i--) {
-            if (providerYieldRateTimeline.changes[i] <= epoch) {
-                return providerYieldRateTimeline.timeline[providerYieldRateTimeline.changes[i]].rate;
-            }
-            if (i == 0) break;
-        }
-    }
-
-    function getActiveProviderRewardRate(uint16 epoch) public view returns (uint128 activeRate) {
-        for (uint i = providerRewardRateTimeline.changes.length - 1; i >= 0; i--) {
-            if (providerRewardRateTimeline.changes[i] <= epoch) {
-                return providerRewardRateTimeline.timeline[providerRewardRateTimeline.changes[i]].rate;
-            }
-            if (i == 0) break;
-        }
-    }
-
     function getActiveProviderBalance(address account, uint16 epoch) public view returns (uint128 activeBalance) {
         ProviderState storage providerState = providerStates[account];
         if (providerState.providerStateTimelineChanges.length > 0) {
@@ -191,6 +209,12 @@ contract ProviderStaking {
             }
         }
     }
+
+    /**
+     *
+     * PROVIDER CLAIM FUNCTIONS
+     *
+     */
 
     function estimateProviderYield(address account) public view returns (uint128 reward) {
         ProviderState storage providerState = providerStates[account];
@@ -277,6 +301,12 @@ contract ProviderStaking {
         token.transferFrom(bank, msg.sender, reward);
     }
 
+    /**
+     *
+     * ADMIN FUNCTIONS
+     *
+     */
+
     function grantAdditionalReward(address account, uint16 epoch, uint128 amount) public {
         require(msg.sender == owner);
         providerStates[account].providerStateTimeline[epoch].additionalRewardPerDayPerToken = amount;
@@ -287,6 +317,7 @@ contract ProviderStaking {
         providerStates[account].whitelisted = true;
     }
 
+    // TODO: Polish this function, make sure it works correctly
     function removeFromWhitelist(address account) public {
         require(msg.sender == owner);
         ProviderState storage providerState = providerStates[account];
@@ -312,6 +343,12 @@ contract ProviderStaking {
         // remove from whitelist
         providerState.whitelisted = false;
     }
+
+    /**
+     *
+     * EPOCH HELPERS
+     *
+     */
 
     function getCurrentEpoch() public view returns (uint16) {
         return getEpoch(block.timestamp);
