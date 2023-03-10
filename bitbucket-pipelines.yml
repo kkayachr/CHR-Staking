@@ -1,0 +1,17 @@
+image: mcr.microsoft.com/devcontainers/typescript-node:0-18
+pipelines:
+  default:
+    - step:
+          name: Test
+          script:
+            - npm install
+            - XUNIT=true npx hardhat test
+            - REPORT_GAS=true npx hardhat test
+            # Coverage distorts gas reporting
+            - npx hardhat coverage
+          caches:
+            - node
+          artifacts:
+            - coverage
+            - coverage.json
+            - artefacts
