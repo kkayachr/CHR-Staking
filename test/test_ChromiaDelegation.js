@@ -68,7 +68,7 @@ describe("ChromiaDelegation", function () {
       await chromiaDelegation.connect(randomAddresses[0]).delegate(owner.address);
       await time.increase(days(365));
 
-      let delegation = await chromiaDelegation.delegations(randomAddresses[0].address);
+      let delegation = await chromiaDelegation.delegatorStates(randomAddresses[0].address);
       await expect(delegation[0]).to.be.closeTo(prevAcc[0], Math.round(prevAcc[0].toNumber() * 0.0000001));
     });
 
