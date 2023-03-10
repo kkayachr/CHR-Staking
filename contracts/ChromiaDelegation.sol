@@ -16,24 +16,27 @@ interface TwoWeeksNotice {
     function getStakeState(address account) external view returns (uint64, uint64, uint64, uint64);
 }
 
+struct DelegationChange {
+    uint128 balance;
+    address delegatedTo;
+    bool changed;
+}
+
+struct DelegationState {
+    uint128 processed;
+    uint128 processedDate;
+    uint128 balanceAtProcessed;
+    uint16 claimedEpoch;
+    bool addedToArray;
+    mapping(uint16 => DelegationChange) delegationTimeline; // each uint key is a week starting from "startTime"
+    uint16[] delegationTimelineChanges;
+}
+
 contract ChromiaDelegation is ProviderStaking {
-    struct DelegationChange {
-        uint128 balance;
-        address delegatedTo;
-        bool changed;
-    }
-
-    struct DelegationState {
-        uint128 processed;
-        uint128 processedDate;
-        uint128 balanceAtProcessed;
-        uint16 claimedEpoch;
-        mapping(uint16 => DelegationChange) delegationTimeline; // each uint key is a week starting from "startTime"
-        uint16[] delegationTimelineChanges;
-    }
-
-    mapping(address => DelegationState) public delegations;
+    mapping(address => DelegationState) public delegatorStates;
     RateTimeline delegatorYieldTimeline;
+
+    address[] public allDelegatorAddresses;
 
     TwoWeeksNotice public twn;
 
@@ -54,10 +57,13 @@ contract ChromiaDelegation is ProviderStaking {
     function verifyStake(address account) internal view {
         (, uint128 remoteAccumulated) = twn.estimateAccumulated(account);
 
-        uint128 deltaTime = uint128(block.timestamp) - delegations[account].processedDate;
-        uint128 localAccumulated = (delegations[account].balanceAtProcessed * deltaTime) / 86400;
+        uint128 deltaTime = uint128(block.timestamp) - delegatorStates[account].processedDate;
+        uint128 localAccumulated = (delegatorStates[account].balanceAtProcessed * deltaTime) / 86400;
 
-        require(remoteAccumulated >= (localAccumulated + delegations[account].processed), 'Accumulated doesnt match with TWN');
+        require(
+            remoteAccumulated >= (localAccumulated + delegatorStates[account].processed),
+            'Accumulated doesnt match with TWN'
+        );
     }
 
     function setRewardRate(uint16 newRate) external {
@@ -69,7 +75,7 @@ contract ChromiaDelegation is ProviderStaking {
     }
 
     function getActiveDelegation(address account, uint16 epoch) public view returns (DelegationChange memory activeDelegation) {
-        DelegationState storage userState = delegations[account];
+        DelegationState storage userState = delegatorStates[account];
         if (userState.delegationTimelineChanges.length > 0) {
             for (uint i = userState.delegationTimelineChanges.length - 1; i >= 0; i--) {
                 if (userState.delegationTimelineChanges[i] <= epoch) {
@@ -80,8 +86,10 @@ contract ChromiaDelegation is ProviderStaking {
         }
     }
 
+    // TODO: add reset function that completely resets all rewards and everything in case user messes up the sync
+
     function estimateYield(address account) public view returns (uint128 reward) {
-        DelegationState storage userState = delegations[account];
+        DelegationState storage userState = delegatorStates[account];
         uint16 processedEpoch = userState.claimedEpoch;
         uint16 currentEpoch = getCurrentEpoch();
 
@@ -125,7 +133,7 @@ contract ChromiaDelegation is ProviderStaking {
     function syncWithdrawRequest() external {
         (, , uint64 lockedUntil, ) = twn.getStakeState(msg.sender);
         require(lockedUntil > 0, 'Withdraw has not been requested');
-        DelegationState storage userState = delegations[msg.sender];
+        DelegationState storage userState = delegatorStates[msg.sender];
         (, uint128 acc) = twn.estimateAccumulated(msg.sender);
 
         uint16 lockedUntilEpoch = getEpoch(lockedUntil);
@@ -137,16 +145,16 @@ contract ChromiaDelegation is ProviderStaking {
     }
 
     function claimYield(address account) public {
-        require(delegations[account].processedDate > 0, 'Address must make a first delegation.');
+        require(delegatorStates[account].processedDate > 0, 'Address must make a first delegation.');
         uint128 reward = estimateYield(account);
         if (reward > 0) {
-            delegations[account].claimedEpoch = getCurrentEpoch() - 1;
+            delegatorStates[account].claimedEpoch = getCurrentEpoch() - 1;
             token.transferFrom(bank, account, reward);
         }
     }
 
     function delegate(address to) public {
-        DelegationState storage userState = delegations[msg.sender];
+        DelegationState storage userState = delegatorStates[msg.sender];
         (, uint128 acc) = twn.estimateAccumulated(msg.sender);
         (uint64 delegateAmount, , uint64 lockedUntil, ) = twn.getStakeState(msg.sender);
         require(delegateAmount > 0, 'Must have a stake to delegate');
@@ -172,6 +180,20 @@ contract ChromiaDelegation is ProviderStaking {
         // Add delegation to new providers pool
         ProviderState storage providerState = providerStates[to];
         providerState.providerStateTimeline[currentEpoch + 1].delegationsIncrease += delegateAmount;
+
+        if (!userState.addedToArray) {
+            allDelegatorAddresses.push(msg.sender);
+            userState.addedToArray = true;
+        }
+    }
+
+    function getNumberOfDelegators() external view returns (uint count) {
+        for (uint i = 0; i < allDelegatorAddresses.length; i++) {
+            DelegationChange memory activeDelegation = getActiveDelegation(allDelegatorAddresses[i], getCurrentEpoch());
+            if (activeDelegation.balance > 0 && activeDelegation.delegatedTo != address(0)) {
+                count++;
+            }
+        }
     }
 
     function undelegate() public {
@@ -179,7 +201,7 @@ contract ChromiaDelegation is ProviderStaking {
         require(lockedUntil == 0, 'Cannot change delegation while withdrawing');
         uint16 currentEpoch = getCurrentEpoch();
         DelegationChange memory currentDelegation = getActiveDelegation(msg.sender, currentEpoch + 1);
-        DelegationState storage userState = delegations[msg.sender];
+        DelegationState storage userState = delegatorStates[msg.sender];
         userState.delegationTimeline[currentEpoch + 1] = DelegationChange(currentDelegation.balance, address(0), true);
         userState.delegationTimelineChanges.push(currentEpoch + 1);
     }
