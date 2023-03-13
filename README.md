@@ -24,6 +24,7 @@
 - [🏁 About ](#-about-)
 - [🤔 Concepts](#-concepts)
   - [Epochs](#epochs)
+  - [Sync-ing](#sync-ing)
 - [🏁 Getting Started ](#-getting-started-)
   - [Prerequisites](#prerequisites)
 - [🔧 Running the tests ](#-running-the-tests-)
@@ -35,8 +36,6 @@
 ## 🏁 About <a name = "about"></a>
 
 Is designed to sit alongside an already deployed TWN contract.
-
-Users **MUST** call `syncWithdrawRequest()` after requesting a withdrawal on the existing TWN contract.
 
 Allows for four district types of yield to be claimed.
 
@@ -57,6 +56,12 @@ effect until the next.
 The contract starts at epoch zero, and ticks over to the next epoch at > `7 * 24 * 60 * 60 seconds`. So a change applied
 20 seconds after the contract is deployed will not be active until `604801 seconds`. A change applied at `604801 seconds`,
 will not be active until `1209601 seconds`.
+
+### Sync-ing
+
+The contract replicates state from its companion TwoWeeksNotice contract.
+
+Users **MUST** call `syncWithdrawRequest()` after requesting a withdrawal on the existing TWN contract. Users ***SHOULD*** redelegate their stake if they change the size of their stake locked at the companion TWN.
 
 
 ## 🏁 Getting Started <a name = "getting_started"></a>
