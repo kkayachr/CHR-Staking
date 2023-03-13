@@ -206,6 +206,21 @@ contract ChromiaDelegation is ProviderStaking {
         userState.delegationTimelineChanges.push(currentEpoch + 1);
     }
 
+    function getAllDelegatorAddresses(uint from, uint to) external view returns (address[] memory result) {
+        to = (allDelegatorAddresses.length > to) ? to : allDelegatorAddresses.length;
+        result = new address[](to - from);
+        for (uint i = 0; i < result.length; i++) {
+            DelegationChange memory activeDelegation = getActiveDelegation(allDelegatorAddresses[from + i], getCurrentEpoch());
+            if (
+                allDelegatorAddresses[from + i] != address(0) &&
+                activeDelegation.balance > 0 &&
+                activeDelegation.delegatedTo != address(0)
+            ) {
+                result[i] = allDelegatorAddresses[from + i];
+            }
+        }
+    }
+
     function drain() external {
         require(msg.sender == owner);
         token.transfer(owner, token.balanceOf(address(this)));
