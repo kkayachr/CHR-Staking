@@ -54,7 +54,7 @@ Additional Provider Reward | Provider | Lump amount paid to a provider for a par
 The staking system manages time in epochs. Reward related changes applied in your present epoch will not take
 effect until the next.
 
-The contract starts at epoch zero, and ticks over to the next epoch at > `7 * 24 * 60 * 60 second`s`. So a change applied
+The contract starts at epoch zero, and ticks over to the next epoch at > `7 * 24 * 60 * 60 seconds`. So a change applied
 20 seconds after the contract is deployed will not be active until `604801 seconds`. A change applied at `604801 seconds`,
 will not be active until `1209601 seconds`.
 
