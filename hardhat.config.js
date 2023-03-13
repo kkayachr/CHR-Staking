@@ -4,6 +4,7 @@ require("@nomiclabs/hardhat-waffle");
 require("@nomiclabs/hardhat-etherscan");
 require("hardhat-gas-reporter");
 require("solidity-coverage");
+require('@primitivefi/hardhat-dodoc');
 
 const NULL_PRIVATE_KEY = '0000000000000000000000000000000000000000000000000000000000000000';
 const BSCTESTNET_PRIVATE_KEY = process.env.BSCTESTNET_PRIVATE_KEY || NULL_PRIVATE_KEY;
@@ -48,6 +49,11 @@ module.exports = {
   },
   etherscan: {
     apiKey: BSCSCAN_API_KEY,
+  },
+  dodoc: {
+    include: ['ChromiaDelegation.sol', 'old/TwoWeeksNotice.sol'],
+    outputDir: 'artifacts/docs',
+    freshOutput: true,
   },
 };
 
