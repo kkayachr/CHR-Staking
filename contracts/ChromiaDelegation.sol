@@ -167,8 +167,10 @@ contract ChromiaDelegation is ProviderStaking {
     /// @notice Set the delegation of the caller for the *next* epoch
     function delegate(address to) public {
         DelegationState storage userState = delegatorStates[msg.sender];
+
         (, uint128 acc) = twn.estimateAccumulated(msg.sender);
         (uint64 delegateAmount, , uint64 lockedUntil, ) = twn.getStakeState(msg.sender);
+
         require(delegateAmount > 0, 'Must have a stake to delegate');
         require(lockedUntil == 0, 'Cannot change delegation while withdrawing');
         require(providerStates[to].whitelisted, 'Provider must be whitelisted');
@@ -193,6 +195,7 @@ contract ChromiaDelegation is ProviderStaking {
         ProviderState storage providerState = providerStates[to];
         providerState.providerStateTimeline[currentEpoch + 1].delegationsIncrease += delegateAmount;
 
+        // add address to all array
         if (!userState.addedToArray) {
             allDelegatorAddresses.push(msg.sender);
             userState.addedToArray = true;
