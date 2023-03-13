@@ -20,14 +20,17 @@
 
 ## 📝 Table of Contents
 
-- [Epochs](#epochs)
-  - [🏁 Getting Started ](#-getting-started-)
-    - [Prerequisites](#prerequisites)
-  - [🔧 Running the tests ](#-running-the-tests-)
-  - [🎈 Usage ](#-usage-)
-  - [🚀 Deployment ](#-deployment-)
-  - [⛏️ Built Using ](#️-built-using-)
-  - [✍️ Authors ](#️-authors-)
+- [📝 Table of Contents](#-table-of-contents)
+- [🏁 About ](#-about-)
+- [🤔 Concepts](#-concepts)
+  - [Epochs](#epochs)
+- [🏁 Getting Started ](#-getting-started-)
+  - [Prerequisites](#prerequisites)
+- [🔧 Running the tests ](#-running-the-tests-)
+- [🎈 Usage ](#-usage-)
+- [🚀 Deployment ](#-deployment-)
+- [⛏️ Built Using ](#️-built-using-)
+- [✍️ Authors ](#️-authors-)
 
 ## 🏁 About <a name = "about"></a>
 
@@ -44,16 +47,16 @@ Provider Yield | Provider | Proportionate to the provider's staked days | `claim
 Provider Delegated Stake Yield | Provider  | Proportionate to the staked days delegated to the provider | `claimProviderDelegationReward()` `claimAllProviderRewards()`
 Additional Provider Reward | Provider | Lump amount paid to a provider for a particular epoch. | `claimProviderDelegationReward()` `claimAllProviderRewards()`
 
-## Concepts
+## 🤔 Concepts
 
-# Epochs
+### Epochs
 
 The staking system manages time in epochs. Reward related changes applied in your present epoch will not take
 effect until the next.
 
-The contract starts at epoch zero, and ticks over to the next epoch at > 7 * 24 * 60 * 60 seconds. So a change applied
-20 seconds after the contract is deployed will not be active until 604801 seconds. A change applied at 604801 seconds, will
-not be active until 1209601 seconds.
+The contract starts at epoch zero, and ticks over to the next epoch at > `7 * 24 * 60 * 60 second`s`. So a change applied
+20 seconds after the contract is deployed will not be active until `604801 seconds`. A change applied at `604801 seconds`,
+will not be active until `1209601 seconds`.
 
 
 ## 🏁 Getting Started <a name = "getting_started"></a>
