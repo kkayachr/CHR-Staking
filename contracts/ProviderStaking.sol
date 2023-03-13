@@ -81,10 +81,12 @@ contract ProviderStaking {
      *
      */
 
+    /// @notice Set the provider yield reward to `newRate` at the new epoch
     function setProviderYieldRate(uint16 newRate) external {
         setNewRate(newRate, providerYieldRateTimeline);
     }
 
+    /// @notice Set the provider reward rate to `newRate` at the new epoch
     function setProviderRewardRate(uint16 newRate) external {
         setNewRate(newRate, providerRewardRateTimeline);
     }
@@ -96,10 +98,12 @@ contract ProviderStaking {
         rateTimeline.changes.push(nextEpoch);
     }
 
+    /// @notice Gets the current active provider yield rate in the present epoch
     function getActiveProviderYieldRate(uint16 epoch) public view returns (uint128 activeRate) {
         return getActiveRate(epoch, providerYieldRateTimeline);
     }
 
+    /// @notice Gets the current active reward rate in the present epoch
     function getActiveProviderRewardRate(uint16 epoch) public view returns (uint128 activeRate) {
         return getActiveRate(epoch, providerRewardRateTimeline);
     }
