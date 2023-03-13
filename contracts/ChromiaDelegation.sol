@@ -11,9 +11,9 @@ import './ProviderStaking.sol';
 import 'hardhat/console.sol';
 
 interface TwoWeeksNotice {
-    function estimateAccumulated(address account) external view returns (uint128, uint128);
-
     function getStakeState(address account) external view returns (uint64, uint64, uint64, uint64);
+
+    function getAccumulated(address account) external view returns (uint128, uint128);
 }
 
 struct DelegationChange {
@@ -61,15 +61,8 @@ contract ChromiaDelegation is ProviderStaking {
 
     /// @dev Ensure the delegator's stake on the TWN contract has not been released.
     function verifyStake(address account) internal view {
-        (, uint128 remoteAccumulated) = twn.estimateAccumulated(account);
-
-        uint128 deltaTime = uint128(block.timestamp) - delegatorStates[account].processedDate;
-        uint128 localAccumulated = (delegatorStates[account].balanceAtProcessed * deltaTime) / 86400;
-
-        require(
-            remoteAccumulated >= (localAccumulated + delegatorStates[account].processed),
-            'Accumulated doesnt match with TWN'
-        );
+        (, uint128 remoteAccumulated) = twn.getAccumulated(account);
+        require(remoteAccumulated == delegatorStates[account].processed, 'Accumulated doesnt match with TWN');
     }
 
     /// @notice Set the reward rate to `rewardRate` for the *next* epoch
@@ -141,22 +134,26 @@ contract ChromiaDelegation is ProviderStaking {
 
     /// @notice Informs the reward contract of a withdrawal on TWN. Failure to do so may result in lost.
     function syncWithdrawRequest() external {
-        (, , uint64 lockedUntil, ) = twn.getStakeState(msg.sender);
+        (, , uint64 lockedUntil, uint64 since) = twn.getStakeState(msg.sender);
         require(lockedUntil > 0, 'Withdraw has not been requested');
         DelegationState storage userState = delegatorStates[msg.sender];
-        (, uint128 acc) = twn.estimateAccumulated(msg.sender);
+        (, uint128 acc) = twn.getAccumulated(msg.sender);
 
-        uint16 lockedUntilEpoch = getEpoch(lockedUntil);
+        require(
+            (userState.balanceAtProcessed * (since - userState.processedDate)) / 86400 + userState.processed == acc,
+            'too many changes in TWN'
+        );
+        uint16 withdrawRequestEpoch = getEpoch(since);
         userState.balanceAtProcessed = 0;
         userState.processed = acc;
-        userState.processedDate = uint128(block.timestamp);
-        userState.delegationTimeline[lockedUntilEpoch - 2] = DelegationChange(0, address(0), true);
-        userState.delegationTimelineChanges.push(lockedUntilEpoch - 2);
+        userState.processedDate = since;
+        userState.delegationTimeline[withdrawRequestEpoch] = DelegationChange(0, address(0), true);
+        userState.delegationTimelineChanges.push(withdrawRequestEpoch);
     }
 
     /// @notice Claims the rewards (which should be per `estimateYield(account)`) for `account`
     function claimYield(address account) public {
-        require(delegatorStates[account].processedDate > 0, 'Address must make a first delegation.');
+        require(delegatorStates[account].delegationTimelineChanges.length > 0, 'Address must make a first delegation.');
         uint128 reward = estimateYield(account);
         if (reward > 0) {
             delegatorStates[account].claimedEpoch = getCurrentEpoch() - 1;
@@ -168,8 +165,8 @@ contract ChromiaDelegation is ProviderStaking {
     function delegate(address to) public {
         DelegationState storage userState = delegatorStates[msg.sender];
 
-        (, uint128 acc) = twn.estimateAccumulated(msg.sender);
-        (uint64 delegateAmount, , uint64 lockedUntil, ) = twn.getStakeState(msg.sender);
+        (, uint128 acc) = twn.getAccumulated(msg.sender);
+        (uint64 delegateAmount, , uint64 lockedUntil, uint64 since) = twn.getStakeState(msg.sender);
 
         require(delegateAmount > 0, 'Must have a stake to delegate');
         require(lockedUntil == 0, 'Cannot change delegation while withdrawing');
@@ -182,12 +179,17 @@ contract ChromiaDelegation is ProviderStaking {
         ProviderState storage prevProviderState = providerStates[currentDelegation.delegatedTo];
         prevProviderState.providerStateTimeline[currentEpoch + 1].delegationsDecrease += currentDelegation.balance;
 
-        if (userState.claimedEpoch == 0) userState.claimedEpoch = currentEpoch;
-        // BUG HERE, if claimedEpoch stays the same and processed becomes acc, users can cheat and earn rewards without staking
-        // in TWN.
+        if (userState.delegationTimelineChanges.length == 0) userState.claimedEpoch = currentEpoch;
+        else
+            require(
+                (userState.balanceAtProcessed * (since - userState.processedDate)) / 86400 + userState.processed == acc,
+                'too many changes in TWN'
+            );
+
         userState.processed = acc;
-        userState.processedDate = uint128(block.timestamp);
+        userState.processedDate = since;
         userState.balanceAtProcessed = delegateAmount;
+
         userState.delegationTimeline[currentEpoch + 1] = DelegationChange(delegateAmount, to, true);
         userState.delegationTimelineChanges.push(currentEpoch + 1);
 
@@ -209,6 +211,10 @@ contract ChromiaDelegation is ProviderStaking {
                 count++;
             }
         }
+    }
+
+    function resetAccount() public {
+        delete delegatorStates[msg.sender];
     }
 
     /// @notice Removes the delegation of the caller for the *next* epoch *if* they are not withdrawing

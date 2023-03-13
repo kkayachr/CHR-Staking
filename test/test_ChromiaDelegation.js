@@ -64,12 +64,14 @@ describe("ChromiaDelegation", function () {
       const { chromiaDelegation, twoWeeksNotice, erc20Mock, owner, randomAddresses } =
         await loadFixture(deployChromiaDelegation);
 
-      let prevAcc = await twoWeeksNotice.estimateAccumulated(randomAddresses[0].address);
+      let prevAcc = await twoWeeksNotice.getAccumulated(randomAddresses[0].address);
       await chromiaDelegation.connect(randomAddresses[0]).delegate(owner.address);
       await time.increase(days(365));
 
       let delegation = await chromiaDelegation.delegatorStates(randomAddresses[0].address);
-      await expect(delegation[0]).to.be.closeTo(prevAcc[0], Math.round(prevAcc[0].toNumber() * 0.0000001));
+      console.log(delegation);
+      console.log(prevAcc);
+      await expect(delegation[0]).to.be.closeTo(prevAcc[1], Math.round(prevAcc[1].toNumber() * 0.0000001));
     });
 
     it("Should let user delegate and claim reward", async () => {
@@ -88,6 +90,27 @@ describe("ChromiaDelegation", function () {
       let postBalance = await erc20Mock.balanceOf(randomAddresses[0].address);
 
       await expect(postBalance - preBalance).to.eq(expectedReward);
+    });
+
+    it("Should let user reset account", async () => {
+      const { chromiaDelegation, twoWeeksNotice, erc20Mock, owner, randomAddresses } =
+        await loadFixture(deployChromiaDelegation);
+
+
+      await chromiaDelegation.connect(randomAddresses[0]).delegate(owner.address);
+      await time.increase(weeks(6));
+      // Epochs:      |Delegate|Reward|Reward|Reward|Reward|Reward|HERE|
+
+      var userAccount = await chromiaDelegation.delegatorStates(randomAddresses[0].address);
+
+      await expect(Object.values(userAccount).every((v) => (v === false || v == 0))).to.be.false;
+
+      await chromiaDelegation.connect(randomAddresses[0]).resetAccount();
+
+      userAccount = await chromiaDelegation.delegatorStates(randomAddresses[0].address);
+
+      await expect(Object.values(userAccount).every((v) => (v === false || v == 0))).to.be.true;
+
     });
     it("Should let user delegate and undelegate reward", async () => {
       const { chromiaDelegation, twoWeeksNotice, erc20Mock, owner, randomAddresses } =
