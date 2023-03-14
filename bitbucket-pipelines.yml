@@ -9,6 +9,7 @@ pipelines:
             - REPORT_GAS=true npx hardhat test
             # Coverage distorts gas reporting
             - npx hardhat coverage
+            - npx hardhat dodoc
           caches:
             - node
           artifacts:
